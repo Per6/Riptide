@@ -177,6 +177,7 @@ namespace Riptide
         public ushort Send(Message message)
         {
 			message.SetSendHeader();
+			if(message.BytesInUse >= Message.MaxSize) throw new Exception($"Message is too large to send {message.BytesInUse} with max of {Message.MaxSize}. Consider splitting it up or increasing Message.MaxPayloadSize at the cost of either reliability or resend attempts.");
             ushort sequenceId = 0;
             if (message.SendMode == MessageSendMode.Notify)
             {
