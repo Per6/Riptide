@@ -284,11 +284,9 @@ namespace Riptide
 		/// <returns>The message that the bits were added to.</returns>
 		private Message AddBits(ulong bitfield, int amount, int size) {
 			if(amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), $"'{nameof(amount)}' cannot be negative!");
-			if(amount > size * BitsPerByte) throw new ArgumentOutOfRangeException(nameof(amount), $"Cannot add more than {sizeof(ulong) * BitsPerByte} bits at a time!");
-			ulong mask = (1UL << amount) - 1 - (amount == 64).ToULong();
-			ulong bitfieldULong = (ulong)Convert.ChangeType(bitfield, typeof(ulong));
-			AddULong(bitfieldULong, 0, mask);
-			return this;
+			if(amount > size * BitsPerByte) throw new ArgumentOutOfRangeException(nameof(amount), $"Cannot add more than {size * BitsPerByte} bits at a time!");
+			ulong mask = CMath.GetMask(amount);
+			return AddULong(bitfield, 0, mask);
 		}
 		/// <inheritdoc cref="AddBits(ulong, int, int)"/>
 		public Message AddBits(byte bitfield, int amount) => AddBits(bitfield, amount, sizeof(byte));
@@ -304,8 +302,8 @@ namespace Riptide
 		/// <param name="size">The size of the bitfield.</param>
 		private void GetBits(out ulong bitfield, int amount, int size) {
 			if(amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), $"'{nameof(amount)}' cannot be negative!");
-			if(amount > size * BitsPerByte) throw new ArgumentOutOfRangeException(nameof(amount), $"Cannot add more than {sizeof(ulong) * BitsPerByte} bits at a time!");
-			ulong mask = (1UL << amount) - 1 - (amount == 64).ToULong();
+			if(amount > size * BitsPerByte) throw new ArgumentOutOfRangeException(nameof(amount), $"Cannot add more than {size * BitsPerByte} bits at a time!");
+			ulong mask = CMath.GetMask(amount);
 			bitfield = GetULong(0, mask);
 		}
 		/// <inheritdoc cref="GetBits(out ulong, int, int)"/>
@@ -1217,177 +1215,265 @@ namespace Riptide
         #endregion
 
         #region Float
-        /// <summary>Adds a <see cref="float"/> to the message.</summary>
-        /// <param name="value">The <see cref="float"/> to add.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        /// <returns>The message that the <see cref="float"/> was added to.</returns>
-        public Message AddFloat(float value, int bitsOfAccuracy = 23)
-        {
-			if(bitsOfAccuracy < 0 || bitsOfAccuracy > 23) throw new ArgumentOutOfRangeException(nameof(bitsOfAccuracy), "Bits of accuracy must be between 0 and 23 (inclusive)");
-			uint val = value.ToUInt();
-			val >>= 23 - bitsOfAccuracy;
-			return AddBits(val, 9 + bitsOfAccuracy);
-        }
+		/// <summary>Adds a <see cref="float"/> to the message.</summary>
+		/// <param name="value">The <see cref="float"/> to add.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+		/// <returns>The message that the <see cref="float"/> was added to.</returns>
+		public Message AddFloat(float value, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true) {
+			if(! value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
+			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
+			if(mantissaBits < 0 || mantissaBits > 23) throw new ArgumentOutOfRangeException(nameof(mantissaBits), "Bits of accuracy must be between 1 and 23 (inclusive)");
+			int shift = 23 - mantissaBits;
+			uint val = value.ConvUInt() >> shift;
+			uint maxUI = max.ConvUInt() >> shift;
+			uint minUI = min.ConvUInt() >> shift;
+			if(acceptInfAndNaN) {
+				maxUI += 3;
+				if(float.IsNaN(value)) val = maxUI;
+				else if(float.IsPositiveInfinity(value)) val = maxUI - 1;
+				else if(float.IsNegativeInfinity(value)) val = maxUI - 2;
+			} else if(val > maxUI || val < minUI) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} instead of {value}");
+			return AddUInt(val, minUI, maxUI);
+		}
 
-        /// <summary>Retrieves a <see cref="float"/> from the message.</summary>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        /// <returns>The <see cref="float"/> that was retrieved.</returns>
-        public float GetFloat(int bitsOfAccuracy = 23)
-        {
-			if(bitsOfAccuracy < 0 || bitsOfAccuracy > 23) throw new ArgumentOutOfRangeException(nameof(bitsOfAccuracy), "Bits of accuracy must be between 0 and 23 (inclusive)");
-			GetBits(out uint val, 9 + bitsOfAccuracy);
-			val <<= 23 - bitsOfAccuracy;
-			return val.ToFloat();
+		/// <summary>Retrieves a <see cref="float"/> from the message.</summary>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+		/// <returns>The <see cref="float"/> that was retrieved.</returns>
+		public float GetFloat(float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true) {
+			if(min > max) throw new ArgumentOutOfRangeException(nameof(min), $"min {min} must be less than or equal to max {max}");
+			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
+			if(mantissaBits < 0 || mantissaBits > 23) throw new ArgumentOutOfRangeException(nameof(mantissaBits), "Bits of accuracy must be between 1 and 23 (inclusive)");
+			int shift = 23 - mantissaBits;
+			uint maxUI = max.ConvUInt() >> shift;
+			if(acceptInfAndNaN) maxUI += 3;
+			uint value = GetUInt(min.ConvUInt() >> shift, maxUI) << shift;
+			float f = value.ConvFloat();
+			if(acceptInfAndNaN) {
+				if(value == maxUI) f = float.NaN;
+				else if(value == maxUI - 1) f = float.PositiveInfinity;
+				else if(value == maxUI - 2) f = float.NegativeInfinity;
+			} else if(!f.IsRealNumber()) throw new Exception("Value is not a valid number");
+			return f;
 		}
 
         /// <summary>Adds a <see cref="float"/> array to the message.</summary>
         /// <param name="array">The array to add.</param>
         /// <param name="includeLength">Whether or not to include the length of the array in the message.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The message that the array was added to.</returns>
-        public Message AddFloats(float[] array, bool includeLength = true, int bitsOfAccuracy = 23)
+        public Message AddFloats(float[] array, bool includeLength = true, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true)
         {
             if (includeLength)
                 AddVarULong((uint)array.Length);
 
             for (int i = 0; i < array.Length; i++)
             {
-                AddFloat(array[i], bitsOfAccuracy);
+                AddFloat(array[i], min ,max, mantissaBits, acceptInfAndNaN);
             }
 
             return this;
         }
 
         /// <summary>Retrieves a <see cref="float"/> array from the message.</summary>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The array that was retrieved.</returns>
-        public float[] GetFloats(int bitsOfAccuracy = 23) => GetFloats((int)GetVarULong(), bitsOfAccuracy);
+        public float[] GetFloats(float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true)
+			=> GetFloats((int)GetVarULong(), min, max, mantissaBits, acceptInfAndNaN);
         /// <summary>Retrieves a <see cref="float"/> array from the message.</summary>
         /// <param name="amount">The amount of floats to retrieve.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The array that was retrieved.</returns>
-        public float[] GetFloats(int amount, int bitsOfAccuracy = 23)
+        public float[] GetFloats(int amount, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true)
         {
             float[] array = new float[amount];
-            ReadFloats(amount, array, 0, bitsOfAccuracy);
+            ReadFloats(amount, array, 0, min, max, mantissaBits, acceptInfAndNaN);
             return array;
         }
         /// <summary>Populates a <see cref="float"/> array with floats retrieved from the message.</summary>
         /// <param name="intoArray">The array to populate.</param>
         /// <param name="startIndex">The position at which to start populating the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        public void GetFloats(float[] intoArray, int startIndex = 0, int bitsOfAccuracy = 23) => GetFloats((int)GetVarULong(), intoArray, startIndex, bitsOfAccuracy);
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        public void GetFloats(float[] intoArray, int startIndex = 0, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true)
+			=> GetFloats((int)GetVarULong(), intoArray, startIndex, min, max, mantissaBits, acceptInfAndNaN);
         /// <summary>Populates a <see cref="float"/> array with floats retrieved from the message.</summary>
         /// <param name="amount">The amount of floats to retrieve.</param>
         /// <param name="intoArray">The array to populate.</param>
         /// <param name="startIndex">The position at which to start populating the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        public void GetFloats(int amount, float[] intoArray, int startIndex = 0, int bitsOfAccuracy = 23)
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        public void GetFloats(int amount, float[] intoArray, int startIndex = 0, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true)
         {
             if (startIndex + amount > intoArray.Length)
                 throw new ArgumentException(ArrayNotLongEnoughError(amount, intoArray.Length, startIndex, FloatName), nameof(amount));
 
-            ReadFloats(amount, intoArray, startIndex, bitsOfAccuracy);
+            ReadFloats(amount, intoArray, startIndex, min, max, mantissaBits, acceptInfAndNaN);
         }
 
         /// <summary>Reads a number of floats from the message and writes them into the given array.</summary>
         /// <param name="amount">The amount of floats to read.</param>
         /// <param name="intoArray">The array to write the floats into.</param>
         /// <param name="startIndex">The position at which to start writing into the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        private void ReadFloats(int amount, float[] intoArray, int startIndex, int bitsOfAccuracy)
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        private void ReadFloats(int amount, float[] intoArray, int startIndex, float min, float max, int mantissaBits, bool acceptInfAndNaN)
         {
             for (int i = 0; i < amount; i++)
             {
-                intoArray[startIndex + i] = GetFloat(bitsOfAccuracy);
+                intoArray[startIndex + i] = GetFloat(min, max, mantissaBits, acceptInfAndNaN);
             }
         }
         #endregion
 
         #region Double
-        /// <summary>Adds a <see cref="double"/> to the message.</summary>
-        /// <param name="value">The <see cref="double"/> to add.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        /// <returns>The message that the <see cref="double"/> was added to.</returns>
-        public Message AddDouble(double value, int bitsOfAccuracy = 52)
-        {
-			if(bitsOfAccuracy < 0 || bitsOfAccuracy > 52) throw new ArgumentOutOfRangeException(nameof(bitsOfAccuracy), "Bits of accuracy must be between 0 and 52 (inclusive)");
-			ulong val = value.ToULong();
-			val >>= 52 - bitsOfAccuracy;
-			return AddBits(val, 12 + bitsOfAccuracy);
-        }
+		/// <summary>Adds a <see cref="double"/> to the message.</summary>
+		/// <param name="value">The <see cref="double"/> to add.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+		/// <returns>The message that the <see cref="double"/> was added to.</returns>
+		public Message AddDouble(double value, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true) {
+			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
+			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
+			if(mantissaBits < 0 || mantissaBits > 52) throw new ArgumentOutOfRangeException(nameof(mantissaBits), "Bits of accuracy must be between 1 and 23 (inclusive)");
+			int shift = 52 - mantissaBits;
+			ulong val = value.ConvULong() >> shift;
+			ulong maxUL = max.ConvULong() >> shift;
+			ulong minUL = min.ConvULong() >> shift;
+			if(acceptInfAndNaN) {
+				maxUL += 3;
+				if(double.IsNaN(value)) val = maxUL;
+				else if(double.IsPositiveInfinity(value)) val = maxUL - 1;
+				else if(double.IsNegativeInfinity(value)) val = maxUL - 2;
+			} else if(val > maxUL || val < minUL) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} (inclusive) but it is {value}");
+			return AddULong(val, minUL, maxUL);
+		}
 
-        /// <summary>Retrieves a <see cref="double"/> from the message.</summary>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        /// <returns>The <see cref="double"/> that was retrieved.</returns>
-        public double GetDouble(int bitsOfAccuracy = 52)
-        {
-			if(bitsOfAccuracy < 0 || bitsOfAccuracy > 52) throw new ArgumentOutOfRangeException(nameof(bitsOfAccuracy), "Bits of accuracy must be between 0 and 52 (inclusive)");
-			GetBits(out ulong val, 12 + bitsOfAccuracy);
-			val <<= 52 - bitsOfAccuracy;
-			return val.ToDouble();
+		/// <summary>Retrieves a <see cref="double"/> from the message.</summary>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+		/// <returns>The <see cref="double"/> that was retrieved.</returns>
+		public double GetDouble(double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true) {
+			if(min > max) throw new ArgumentOutOfRangeException(nameof(min), $"min {min} must be less than or equal to max {max}");
+			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
+			if(mantissaBits < 0 || mantissaBits > 52) throw new ArgumentOutOfRangeException(nameof(mantissaBits), "Bits of accuracy must be between 1 and 23 (inclusive)");
+			int shift = 52 - mantissaBits;
+			ulong maxUL = max.ConvULong() >> shift;
+			if(acceptInfAndNaN) maxUL += 3;
+			ulong value = GetULong(min.ConvULong() >> shift, maxUL) << shift;
+			double d = value.ConvDouble();
+			if(acceptInfAndNaN) {
+				if(value == maxUL) d = double.NaN;
+				else if(value == maxUL - 1) d = double.PositiveInfinity;
+				else if(value == maxUL - 2) d = double.NegativeInfinity;
+			} else if(!d.IsRealNumber()) throw new Exception("Value is not a valid number");
+			return d;
 		}
 
         /// <summary>Adds a <see cref="double"/> array to the message.</summary>
         /// <param name="array">The array to add.</param>
         /// <param name="includeLength">Whether or not to include the length of the array in the message.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The message that the array was added to.</returns>
-        public Message AddDoubles(double[] array, bool includeLength = true, int bitsOfAccuracy = 52)
+        public Message AddDoubles(double[] array, bool includeLength = true, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true)
         {
             if (includeLength)
                 AddVarULong((uint)array.Length);
 
             for (int i = 0; i < array.Length; i++)
             {
-                AddDouble(array[i], bitsOfAccuracy);
+                AddDouble(array[i], min, max, mantissaBits, acceptInfAndNaN);
             }
 
             return this;
         }
 
         /// <summary>Retrieves a <see cref="double"/> array from the message.</summary>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The array that was retrieved.</returns>
-        public double[] GetDoubles(int bitsOfAccuracy = 52) => GetDoubles((int)GetVarULong(), bitsOfAccuracy);
+        public double[] GetDoubles(double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true)
+			=> GetDoubles((int)GetVarULong(), min, max, mantissaBits, acceptInfAndNaN);
         /// <summary>Retrieves a <see cref="double"/> array from the message.</summary>
         /// <param name="amount">The amount of doubles to retrieve.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
         /// <returns>The array that was retrieved.</returns>
-        public double[] GetDoubles(int amount, int bitsOfAccuracy = 52)
+        public double[] GetDoubles(int amount, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true)
         {
             double[] array = new double[amount];
-            ReadDoubles(amount, array, 0, bitsOfAccuracy);
+            ReadDoubles(amount, array, 0, min, max, mantissaBits, acceptInfAndNaN);
             return array;
         }
         /// <summary>Populates a <see cref="double"/> array with doubles retrieved from the message.</summary>
         /// <param name="intoArray">The array to populate.</param>
         /// <param name="startIndex">The position at which to start populating the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        public void GetDoubles(double[] intoArray, int startIndex = 0, int bitsOfAccuracy = 52) => GetDoubles((int)GetVarULong(), intoArray, startIndex, bitsOfAccuracy);
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        public void GetDoubles(double[] intoArray, int startIndex = 0, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true)
+			=> GetDoubles((int)GetVarULong(), intoArray, startIndex, min, max, mantissaBits, acceptInfAndNaN);
         /// <summary>Populates a <see cref="double"/> array with doubles retrieved from the message.</summary>
         /// <param name="amount">The amount of doubles to retrieve.</param>
         /// <param name="intoArray">The array to populate.</param>
         /// <param name="startIndex">The position at which to start populating the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        public void GetDoubles(int amount, double[] intoArray, int startIndex = 0, int bitsOfAccuracy = 52)
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        public void GetDoubles(int amount, double[] intoArray, int startIndex = 0, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true)
         {
             if (startIndex + amount > intoArray.Length)
                 throw new ArgumentException(ArrayNotLongEnoughError(amount, intoArray.Length, startIndex, DoubleName), nameof(amount));
 
-            ReadDoubles(amount, intoArray, startIndex, bitsOfAccuracy);
+            ReadDoubles(amount, intoArray, startIndex, min, max, mantissaBits, acceptInfAndNaN);
         }
 
         /// <summary>Reads a number of doubles from the message and writes them into the given array.</summary>
         /// <param name="amount">The amount of doubles to read.</param>
         /// <param name="intoArray">The array to write the doubles into.</param>
         /// <param name="startIndex">The position at which to start writing into the array.</param>
-		/// <param name="bitsOfAccuracy">The amount of bits of the mantissa.</param>
-        private void ReadDoubles(int amount, double[] intoArray, int startIndex, int bitsOfAccuracy)
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
+		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
+        private void ReadDoubles(int amount, double[] intoArray, int startIndex, double min, double max, int mantissaBits, bool acceptInfAndNaN)
         {
             for (int i = 0; i < amount; i++)
             {
-                intoArray[startIndex + i] = GetDouble(bitsOfAccuracy);
+                intoArray[startIndex + i] = GetDouble(min, max, mantissaBits, acceptInfAndNaN);
             }
         }
         #endregion
@@ -1658,12 +1744,12 @@ namespace Riptide
         /// <remarks>This method is simply an alternative way of calling <see cref="AddULong(ulong, ulong, ulong)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(ulong value) => AddULong(value);
-        /// <inheritdoc cref="AddFloat(float, int)"/>
-        /// <remarks>This method is simply an alternative way of calling <see cref="AddFloat(float, int)"/>.</remarks>
+        /// <inheritdoc cref="AddFloat(float, float, float, int, bool)"/>
+        /// <remarks>This method is simply an alternative way of calling <see cref="AddFloat(float, float, float, int, bool)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(float value) => AddFloat(value);
-        /// <inheritdoc cref="AddDouble(double, int)"/>
-        /// <remarks>This method is simply an alternative way of calling <see cref="AddDouble(double, int)"/>.</remarks>
+        /// <inheritdoc cref="AddDouble(double, double, double, int, bool)"/>
+        /// <remarks>This method is simply an alternative way of calling <see cref="AddDouble(double, double, double, int, bool)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(double value) => AddDouble(value);
         /// <inheritdoc cref="AddString(string, byte, ValueTuple{char, char}[])"/>
@@ -1711,12 +1797,12 @@ namespace Riptide
         /// <remarks>This method is simply an alternative way of calling <see cref="AddULongs(ulong[], bool, ulong, ulong)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(ulong[] array, bool includeLength = true) => AddULongs(array, includeLength);
-        /// <inheritdoc cref="AddFloats(float[], bool, int)"/>
-        /// <remarks>This method is simply an alternative way of calling <see cref="AddFloats(float[], bool, int)"/>.</remarks>
+        /// <inheritdoc cref="AddFloats(float[], bool, float, float, int, bool)"/>
+        /// <remarks>This method is simply an alternative way of calling <see cref="AddFloats(float[], bool, float, float, int, bool)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(float[] array, bool includeLength = true) => AddFloats(array, includeLength);
-        /// <inheritdoc cref="AddDoubles(double[], bool, int)"/>
-        /// <remarks>This method is simply an alternative way of calling <see cref="AddDoubles(double[], bool, int)"/>.</remarks>
+        /// <inheritdoc cref="AddDoubles(double[], bool, double, double, int, bool)"/>
+        /// <remarks>This method is simply an alternative way of calling <see cref="AddDoubles(double[], bool, double, double, int, bool)"/>.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Message Add(double[] array, bool includeLength = true) => AddDoubles(array, includeLength);
         /// <inheritdoc cref="AddStrings(string[], bool, byte, ValueTuple{char, char}[])"/>

@@ -16,18 +16,56 @@ namespace Riptide.Utils
 
 		/// <remarks>Rounds down and includes 0 as 0.</remarks>
 		internal static byte Log2(this ulong value) {
-			byte bits = 0;
-			for(byte step = 32; step > 0; step >>= 1) {
+			int bits = 0;
+			for(int step = 32; step > 0; step >>= 1) {
 				if(value < (1UL << step)) continue;
 				value >>= step;
 				bits += step;
 			}
-			return bits;
+			return (byte)bits;
 		}
 
 		internal static bool IsPowerOf2(this ulong value) {
 			if(value == 0) return false;
 			return (value & (value - 1)) == 0;
+		}
+
+		internal static ulong GetMask(int bits) => (1UL << bits) - 1UL - (bits == 64).ToULong();
+
+		internal static bool IsRealNumber(this float value)
+			=> !float.IsNaN(value) && !float.IsInfinity(value);
+
+		internal static float RemoveBits(this float value, int bits)
+			=> (value.ToUInt() & ~(uint)GetMask(bits)).ToFloat();
+
+		internal static unsafe uint ConvUInt(this float value) {
+			int i = *(int*)&value;
+			if(i < 0) i = int.MaxValue - i;
+			return i.Conv();
+		}
+
+		internal static unsafe float ConvFloat(this uint value) {
+			int i = value.Conv();
+			if(i < 0) i = int.MaxValue - i;
+			return *(float*)&i;
+		}
+
+		internal static bool IsRealNumber(this double value)
+			=> !double.IsNaN(value) && !double.IsInfinity(value);
+
+		internal static double RemoveBits(this double value, int bits)
+			=> (value.ToULong() & ~GetMask(bits)).ToDouble();
+
+		internal static unsafe ulong ConvULong(this double value) {
+			long l = *(long*)&value;
+			if(l < 0) l = long.MaxValue - l;
+			return l.Conv();
+		}
+
+		internal static unsafe double ConvDouble(this ulong value) {
+			long l = value.Conv();
+			if(l < 0) l = long.MaxValue - l;
+			return *(double*)&l;
 		}
 
 		internal static unsafe uint ToUInt(this float value) => *(uint*)&value;
@@ -44,7 +82,5 @@ namespace Riptide.Utils
 		internal static int Conv(this uint value) => (int)value - (1 << 31);
 		internal static ulong Conv(this long value) => (ulong)(value + (1L << 63));
 		internal static long Conv(this ulong value) => (long)value - (1L << 63);
-
-		internal static unsafe int UnmanagedSizeOf<T>() where T : unmanaged => sizeof(T);
 	}
 }

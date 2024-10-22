@@ -219,7 +219,7 @@ namespace Riptide.Utils
 			if(startBit >= 64 * data.Length) return 0;
 			int shift = startBit % 64;
 			int startULong = startBit / 64;
-			ulong mask = (1UL << length) - 1 - (length == 64).ToULong();
+			ulong mask = CMath.GetMask(length);
 			ulong val1 = (data[startULong] >> shift) & mask;
 			if(shift + length <= 64 || startBit + length >= 64 * data.Length)
 				return val1;
