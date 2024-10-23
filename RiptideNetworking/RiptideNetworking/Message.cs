@@ -1222,19 +1222,21 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="float"/> was added to.</returns>
+		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible floats are between -0.01 and 0.01.</remarks>
 		public Message AddFloat(float value, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true) {
-			if(! value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
+			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
 			if(mantissaBits < 0 || mantissaBits > 23) throw new ArgumentOutOfRangeException(nameof(mantissaBits), "Bits of accuracy must be between 1 and 23 (inclusive)");
 			int shift = 23 - mantissaBits;
 			uint val = value.ConvUInt() >> shift;
 			uint maxUI = max.ConvUInt() >> shift;
 			uint minUI = min.ConvUInt() >> shift;
-			if(acceptInfAndNaN) {
-				maxUI += 3;
+			if(acceptInfAndNaN) maxUI += 3;
+			if(acceptInfAndNaN && !value.IsRealNumber()) {
 				if(float.IsNaN(value)) val = maxUI;
 				else if(float.IsPositiveInfinity(value)) val = maxUI - 1;
 				else if(float.IsNegativeInfinity(value)) val = maxUI - 2;
+				else throw new Exception($"Value is not a real number but neither nan nor any infinity: {value}");
 			} else if(val > maxUI || val < minUI) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} instead of {value}");
 			return AddUInt(val, minUI, maxUI);
 		}
@@ -1354,6 +1356,7 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="double"/> was added to.</returns>
+		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible doubles are between -0.01 and 0.01.</remarks>
 		public Message AddDouble(double value, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true) {
 			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
@@ -1362,11 +1365,12 @@ namespace Riptide
 			ulong val = value.ConvULong() >> shift;
 			ulong maxUL = max.ConvULong() >> shift;
 			ulong minUL = min.ConvULong() >> shift;
-			if(acceptInfAndNaN) {
-				maxUL += 3;
+			if(acceptInfAndNaN) maxUL += 3;
+			if(acceptInfAndNaN && !value.IsRealNumber()) {
 				if(double.IsNaN(value)) val = maxUL;
 				else if(double.IsPositiveInfinity(value)) val = maxUL - 1;
 				else if(double.IsNegativeInfinity(value)) val = maxUL - 2;
+				else throw new Exception($"Value is not a real number but neither nan nor any infinity: {value}");
 			} else if(val > maxUL || val < minUL) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} (inclusive) but it is {value}");
 			return AddULong(val, minUL, maxUL);
 		}
@@ -1477,6 +1481,117 @@ namespace Riptide
             }
         }
         #endregion
+
+		#region FixedPoint
+		/// <summary>Adds a fixed point number to the message.</summary>
+		/// <param name="value">The <see cref="decimal"/> to add.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		/// <returns>The message that the <see cref="decimal"/> was added to.</returns>
+		public Message AddFixedPoint(decimal value, decimal min, decimal max, decimal stepSize) {
+			if(value < min || value > max) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} (inclusive) but it is {value}");
+			if(stepSize <= 0) throw new ArgumentOutOfRangeException(nameof(stepSize), "Step size must be greater than 0");
+			decimal dif = max - min;
+			decimal steps = Math.Ceiling(dif / stepSize);
+			if(steps > ulong.MaxValue) throw new ArgumentOutOfRangeException(nameof(stepSize), $"Step size {stepSize} is too small for the range: {dif} of min: {min} and max: {max}");
+			ulong val = (ulong)Math.Round((value - min) * steps / dif);
+			AddULong(val, 0UL, (ulong)steps);
+			return this;
+		}
+
+		/// <summary>Retrieves a fixed point number from the message.</summary>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		/// <returns>The <see cref="decimal"/> that was retrieved.</returns>
+		public decimal GetFixedPoint(decimal min, decimal max, decimal stepSize) {
+			if(min > max) throw new ArgumentOutOfRangeException(nameof(min), $"min {min} must be less than or equal to max {max}");
+			if(stepSize <= 0) throw new ArgumentOutOfRangeException(nameof(stepSize), "Step size must be greater than 0");
+			decimal dif = max - min;
+			decimal steps = Math.Ceiling(dif / stepSize);
+			if(steps > ulong.MaxValue) throw new ArgumentOutOfRangeException(nameof(stepSize), $"Step size {stepSize} is too small for the range: {dif} of min: {min} and max: {max}");
+			ulong val = GetULong(0, (ulong)steps);
+			return min + dif * val / steps;
+		}
+
+		/// <summary>Adds a fixed point number array to the message.</summary>
+		/// <param name="array">The array to add.</param>
+		/// <param name="includeLength">Whether or not to include the length of the array in the message.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		/// <returns>The message that the array was added to.</returns>
+		public Message AddFixedPoints(decimal[] array, decimal min, decimal max, decimal stepSize, bool includeLength = true) {
+			if(includeLength)
+				AddVarULong((uint)array.Length);
+
+			for(int i = 0; i < array.Length; i++)
+				AddFixedPoint(array[i], min, max, stepSize);
+
+			return this;
+		}
+
+		/// <summary>Retrieves a fixed point number array from the message.</summary>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		/// <returns>The array that was retrieved.</returns>
+		public decimal[] GetFixedPoints(decimal min, decimal max, decimal stepSize)
+			=> GetFixedPoints((int)GetVarULong(), min, max, stepSize);
+
+		/// <summary>Retrieves a fixed point number array from the message.</summary>
+		/// <param name="amount">The amount of fixed point numbers to retrieve.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		/// <returns>The array that was retrieved.</returns>
+		public decimal[] GetFixedPoints(int amount, decimal min, decimal max, decimal stepSize) {
+			decimal[] array = new decimal[amount];
+			ReadFixedPoints(amount, array, 0, min, max, stepSize);
+			return array;
+		}
+
+		/// <summary>Populates a fixed point number array with fixed point numbers retrieved from the message.</summary>
+		/// <param name="intoArray">The array to populate.</param>
+		/// <param name="startIndex">The position at which to start populating the array.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		public void GetFixedPoints(decimal[] intoArray, int startIndex, decimal min, decimal max, decimal stepSize)
+			=> GetFixedPoints((int)GetVarULong(), intoArray, startIndex, min, max, stepSize);
+
+		/// <summary>Populates a fixed point number array with fixed point numbers retrieved from the message.</summary>
+		/// <param name="amount">The amount of fixed point numbers to retrieve.</param>
+		/// <param name="intoArray">The array to populate.</param>
+		/// <param name="startIndex">The position at which to start populating the array.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		public void GetFixedPoints(int amount, decimal[] intoArray, int startIndex, decimal min, decimal max, decimal stepSize) {
+			if(startIndex + amount > intoArray.Length)
+				throw new ArgumentException(ArrayNotLongEnoughError(amount, intoArray.Length, startIndex, FixedPointName), nameof(amount));
+
+			ReadFixedPoints(amount, intoArray, startIndex, min, max, stepSize);
+		}
+
+		/// <summary>Reads a number of fixed point numbers from the message and writes them into the given array.</summary>
+		/// <param name="amount">The amount of fixed point numbers to read.</param>
+		/// <param name="intoArray">The array to write the fixed point numbers into.</param>
+		/// <param name="startIndex">The position at which to start writing into the array.</param>
+		/// <param name="min">The minimum value.</param>
+		/// <param name="max">The maximum value.</param>
+		/// <param name="stepSize">The difference between each possible value.</param>
+		private decimal[] ReadFixedPoints(int amount, decimal[] intoArray, int startIndex, decimal min, decimal max, decimal stepSize) {
+			if(startIndex + amount > intoArray.Length)
+				throw new ArgumentException(ArrayNotLongEnoughError(amount, intoArray.Length, startIndex, FixedPointName), nameof(amount));
+
+			for(int i = 0; i < amount; i++)
+				intoArray[startIndex + i] = GetFixedPoint(min, max, stepSize);
+
+			return intoArray;
+		}
+		#endregion
 
         #region String
         /// <summary>Adds a <see cref="string"/> to the message.</summary>
@@ -1839,6 +1954,8 @@ namespace Riptide
         private const string FloatName       = "float";
         /// <summary>The name of a <see cref="double"/> value.</summary>
         private const string DoubleName      = "double";
+		/// <summary>The name of a fixed-point <see cref="decimal"/> value.</summary>
+		private const string FixedPointName  = "fixed point";
         /// <summary>The name of a <see cref="string"/> value.</summary>
         private const string StringName      = "string";
         /// <summary>The name of an array length value.</summary>
