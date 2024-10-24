@@ -660,6 +660,24 @@ namespace Riptide
         }
         #endregion
 
+		#region Enum
+		/// <summary>Adds an Enum to the message.</summary>
+		/// <param name="value">The enum to add.</param>
+		/// <returns>The message that the <see cref="Enum"/> was added to.</returns>
+		public Message AddEnum(Enum value) {
+			Enum[] possibleValues = (Enum[])Enum.GetValues(value.GetType());
+			return AddElement(value, possibleValues);
+		}
+
+		/// <summary>Retrieves an Enum from the message.</summary>
+		/// <typeparam name="T">The type of the enum.</typeparam>
+		/// <returns>The enum that was retrieved.</returns>
+		public T GetEnum<T>() where T : Enum {
+			Enum[] possibleValues = (Enum[])Enum.GetValues(typeof(T));
+			return (T)GetElement(possibleValues);
+		}
+		#endregion
+
         #region Short & UShort
 		/// <summary>Adds a <see cref="short"/> to the message.</summary>
         /// <param name="value">The <see cref="short"/> to add.</param>
@@ -1493,11 +1511,11 @@ namespace Riptide
 			if(value < min || value > max) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} (inclusive) but it is {value}");
 			if(stepSize <= 0) throw new ArgumentOutOfRangeException(nameof(stepSize), "Step size must be greater than 0");
 			decimal dif = max - min;
+			if(dif == 0m) return this;
 			decimal steps = Math.Ceiling(dif / stepSize);
 			if(steps > ulong.MaxValue) throw new ArgumentOutOfRangeException(nameof(stepSize), $"Step size {stepSize} is too small for the range: {dif} of min: {min} and max: {max}");
 			ulong val = (ulong)Math.Round((value - min) * steps / dif);
-			AddULong(val, 0UL, (ulong)steps);
-			return this;
+			return AddULong(val, 0UL, (ulong)steps);
 		}
 
 		/// <summary>Retrieves a fixed point number from the message.</summary>
@@ -1603,8 +1621,7 @@ namespace Riptide
         {
 			if(max < byte.MaxValue && max > (byte.MaxValue >> 1)) throw new ArgumentException($"max is incompatible with utf8: {max}");
 			value = Helper.SwapValues(value, replacements);
-            AddBytes(Encoding.UTF8.GetBytes(value), true, byte.MinValue, max);
-            return this;
+            return AddBytes(Encoding.UTF8.GetBytes(value), true, byte.MinValue, max);
         }
 
         /// <summary>Retrieves a <see cref="string"/> from the message.</summary>
@@ -1697,8 +1714,7 @@ namespace Riptide
 			if (index == -1)
 				throw new ArgumentException($"Element {element} is not a valid value for this message", nameof(element));
 
-			AddInt(index, 0, possibleValues.Length - 1);
-			return this;
+			return AddInt(index, 0, possibleValues.Length - 1);
 		}
 
 		/// <summary>Retrieves one of the possible values.</summary>
@@ -1954,8 +1970,8 @@ namespace Riptide
         private const string FloatName       = "float";
         /// <summary>The name of a <see cref="double"/> value.</summary>
         private const string DoubleName      = "double";
-		/// <summary>The name of a fixed-point <see cref="decimal"/> value.</summary>
-		private const string FixedPointName  = "fixed point";
+		/// <summary>The name of a fixed-point value.</summary>
+		private const string FixedPointName  = "fixed-point";
         /// <summary>The name of a <see cref="string"/> value.</summary>
         private const string StringName      = "string";
         /// <summary>The name of an array length value.</summary>
