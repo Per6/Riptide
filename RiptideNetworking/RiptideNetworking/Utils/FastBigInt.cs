@@ -94,7 +94,7 @@ namespace Riptide.Utils
 
 		internal void Add(FastBigInt value, ulong mult) {
 			minIndex = Math.Min(minIndex, value.minIndex);
-			maxIndex = Math.Max(maxIndex, value.maxIndex + 2);
+			maxIndex = Math.Max(maxIndex + 1, value.maxIndex + 2);
 			EnsureCapacity();
 			int offset = value.minIndex;
 			int len = value.maxIndex - offset + 3;
@@ -111,7 +111,7 @@ namespace Riptide.Utils
 
 		internal void Sub(FastBigInt value, ulong mult) {
 			minIndex = Math.Min(minIndex, value.minIndex);
-			maxIndex = Math.Max(maxIndex, value.maxIndex + 2);
+			maxIndex = Math.Max(maxIndex, value.maxIndex + 1);
 			EnsureCapacity();
 			int offset = value.minIndex;
 			int len = value.maxIndex - offset + 3;
@@ -216,14 +216,14 @@ namespace Riptide.Utils
 
 		internal ulong TakeBits(int startBit, int length) {
 			if(startBit < 0 || length < 0 || length > 64) throw new ArgumentOutOfRangeException();
-			if(startBit >= 64 * data.Length) return 0;
-			int shift = startBit % 64;
 			int startULong = startBit / 64;
+			if(startULong >= data.Length) return 0;
+			int shift = startBit % 64;
 			ulong mask = CMath.GetMask(length);
 			ulong val1 = (data[startULong] >> shift) & mask;
-			if(shift + length <= 64 || startBit + length >= 64 * data.Length)
-				return val1;
 			int endULong = startULong + 1;
+			if(shift + length <= 64 || endULong >= data.Length)
+				return val1;
 			int extraBits = shift + length - 64;
 			ulong extraMask = (1UL << extraBits) - 1;
 			ulong val2 = data[endULong] & extraMask;
@@ -269,7 +269,7 @@ namespace Riptide.Utils
 			return (value, carry);
 		}
 
-		private static (ulong value, ulong carry) SubtractUlong(ulong val, ulong sub) {
+		private static (ulong value, ulong carry) SubUlong(ulong val, ulong sub) {
 			ulong value = val - sub;
 			ulong carry = (value > val).ToULong();
 			return (value, carry);
@@ -299,7 +299,6 @@ namespace Riptide.Utils
 
 			ulong low = xLow * yLow;
 			ulong high = xHigh * yHigh;
-
 			ulong cross1 = xLow * yHigh;
 			ulong cross2 = xHigh * yLow;
 

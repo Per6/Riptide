@@ -110,11 +110,12 @@ namespace Riptide
 		private FastBigInt writeValue;
 		/// <summary>The current read bit of the message.</summary>
 		private int readBit = 0;
-		/// <summary>The header necessary for resending the message.</summary>
+		/// <summary>The header necessary for sending the message.</summary>
 		private (MessageHeader header, ushort? id)? sendHeader = null;
 
         /// <summary>Initializes a reusable <see cref="Message"/> instance.</summary>
         private Message() {
+			if(InitialMessageSize < sizeof(ulong)) throw new InvalidOperationException($"'{nameof(InitialMessageSize)}' must be at least {sizeof(ulong)}!");
 			data = new FastBigInt(InitialMessageSize / sizeof(ulong));
 			writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
 		}
@@ -159,7 +160,7 @@ namespace Riptide
 
 		/// <summary>Logs info of the message</summary>
 		public void LogStuff(string added = "") {
-			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nSendMode: {SendMode}\nRead Bit: {readBit}\n{added}");
+			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nSendMode: {SendMode}\nRead Bit: {readBit}\nSend Header: {sendHeader}\n{added}");
 		}
 
         #region Functions
@@ -334,7 +335,7 @@ namespace Riptide
 		/// <returns>The message's Id.</returns>
 		internal ushort GetMessageID(MessageHeader header) {
 			ushort messageId = GetUShort(0, MaxId);
-			if(sendHeader != null) throw new Exception("Message's resendHeader is not null!");
+			if(sendHeader != null) throw new Exception("Message's sendHeader is not null!");
 			PrepareSendHeader(header, messageId);
 			return messageId;
 		}
@@ -673,8 +674,46 @@ namespace Riptide
 		/// <typeparam name="T">The type of the enum.</typeparam>
 		/// <returns>The enum that was retrieved.</returns>
 		public T GetEnum<T>() where T : Enum {
-			Enum[] possibleValues = (Enum[])Enum.GetValues(typeof(T));
-			return (T)GetElement(possibleValues);
+			T[] possibleValues = (T[])Enum.GetValues(typeof(T));
+			return GetElement(possibleValues);
+		}
+
+		/// <summary>Adds a <see cref="Enum"/> array to the message.</summary>
+		/// <param name="values">The enum values to add to the message.</param>
+		/// <returns>The message that the array was added to.</returns>
+		public Message AddEnums(params Enum[] values) {
+			if(values == null) throw new ArgumentNullException(nameof(values));
+			foreach(Enum value in values)
+				AddEnum(value);
+			
+			return this;
+		}
+
+		/// <summary>Retrieves a <see cref="Enum"/> array from the message.</summary>
+		/// <param name="types">The types of the enums to retrieve.</param>
+		/// <returns>The array that was retrieved.</returns>
+		public Enum[] GetEnums(params Type[] types) {
+			if(types == null) throw new ArgumentNullException(nameof(types));
+			Enum[] array = new Enum[types.Length];
+			for(int i = 0; i < types.Length; i++) {
+				Type type = types[i];
+				if(!type.IsEnum) throw new ArgumentException($"Type {type} is not an enum", nameof(types));
+				Enum[] possibleValues = (Enum[])Enum.GetValues(type);
+        		array[i] = GetElement(possibleValues);
+			}
+			return array;
+		}
+
+		/// <summary>Retrieves a <see cref="Enum"/> array from the message.</summary>
+		/// <typeparam name="T">The type of the enums.</typeparam>
+		/// <param name="amount">The amount of enums to get.</param>
+		/// <returns>The array that was retrieved.</returns>
+		public T[] GetEnums<T>(int amount) where T : Enum {
+			T[] possibleValues = (T[])Enum.GetValues(typeof(T));
+			T[] array = new T[amount];
+			for(int i = 0; i < amount; i++)
+				array[i] = GetElement(possibleValues);
+			return array;
 		}
 		#endregion
 

@@ -4,6 +4,8 @@
 // https://github.com/RiptideNetworking/Riptide/blob/main/LICENSE.md
 
 
+using System.Runtime.CompilerServices;
+
 namespace Riptide.Utils
 {
 	internal static class CMath
@@ -68,19 +70,32 @@ namespace Riptide.Utils
 			return *(double*)&l;
 		}
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe uint ToUInt(this float value) => *(uint*)&value;
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe float ToFloat(this uint value) => *(float*)&value;
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe ulong ToULong(this double value) => *(ulong*)&value;
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe double ToDouble(this ulong value) => *(double*)&value;
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe ulong ToULong(this bool value) => *(byte*)&value;
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static byte Conv(this sbyte value) => (byte)(value + (1 << 7));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static sbyte Conv(this byte value) => (sbyte)(value - (1 << 7));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static ushort Conv(this short value) => (ushort)(value + (1 << 15));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static short Conv(this ushort value) => (short)(value - (1 << 15));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static uint Conv(this int value) => (uint)(value + (1 << 31));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static int Conv(this uint value) => (int)value - (1 << 31);
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static ulong Conv(this long value) => (ulong)(value + (1L << 63));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static long Conv(this ulong value) => (long)value - (1L << 63);
 	}
 }
