@@ -200,12 +200,14 @@ namespace Riptide
             else if (message.SendMode == MessageSendMode.Reliable)
             {
                 sequenceId = reliable.NextSequenceId;
-                PendingMessage pendingMessage = PendingMessage.Create(sequenceId, message, this);
+				message.SequenceId = sequenceId;
+                PendingMessage pendingMessage = PendingMessage.Create(message, this);
                 pendingMessages.Add(sequenceId, pendingMessage);
                 pendingMessage.TrySend();
                 Metrics.ReliableUniques++;
             } else throw new Exception("Invalid send mode");
 
+			message.ResetSendHeader();
             return sequenceId;
         }
 

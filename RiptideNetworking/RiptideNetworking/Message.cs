@@ -186,7 +186,6 @@ namespace Riptide
 				mult *= MaxId + 1UL;
 			}
 			data.Mult(mult);
-			writeValue.Mult(mult);
 			Data[0] += (ulong)header;
 			Data[0] += umid;
 			return this;
@@ -230,8 +229,8 @@ namespace Riptide
 		}
 
 		/// <summary>Removes the sendHeader from the message data and stores it in the sendHeader.</summary>
-		/// <remarks>This is necessary when you send a message and want to read from it afterwards.</remarks>
-		public void ResetSendHeader() {
+		/// <remarks>This is necessary when you send a message and want to read or write from/to it afterwards.</remarks>
+		internal void ResetSendHeader() {
 			if(sendHeader != null) return;
 			GetBits(out byte bitfield, HeaderBits);
 			MessageHeader header = (MessageHeader)bitfield;
@@ -245,7 +244,14 @@ namespace Riptide
 			}
 			ushort? id = null;
 			if(sendMode != MessageSendMode.Notify) id = GetUShort(0, MaxId);
+			ResetReadBit();
 			sendHeader = (header, id);
+		}
+
+		/// <summary>Divides data by 2^readBit, so the readBit can go back to 0.</summary>
+		internal void ResetReadBit() {
+			data.RightShiftArbitrary(readBit);
+			readBit = 0;
 		}
         #endregion
 
@@ -1109,12 +1115,6 @@ namespace Riptide
 				readBit += bitCount;
 			}
 			return value + min;
-		}
-
-		/// <summary>Divides data by 2^readBit, so it can go back to 0.</summary>
-		internal void ResetReadBit() {
-			data.RightShiftArbitrary(readBit);
-			readBit = 0;
 		}
 
 		/// <summary>Adds a <see cref="long"/> to the message.</summary>

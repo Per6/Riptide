@@ -41,16 +41,14 @@ namespace Riptide
 
         #region Pooling
         /// <summary>Retrieves a <see cref="PendingMessage"/> instance and initializes it.</summary>
-        /// <param name="sequenceId">The sequence ID of the message.</param>
         /// <param name="message">The message that is being sent reliably.</param>
         /// <param name="connection">The <see cref="Connection"/> to use to send (and resend) the pending message.</param>
         /// <returns>An intialized <see cref="PendingMessage"/> instance.</returns>
-        internal static PendingMessage Create(ushort sequenceId, Message message, Connection connection)
+        internal static PendingMessage Create(Message message, Connection connection)
         {
             PendingMessage pendingMessage = RetrieveFromPool();
             pendingMessage.connection = connection;
 
-			message.SequenceId = sequenceId;
             pendingMessage.size = message.BytesInUse;
             Buffer.BlockCopy(message.Data, 0, pendingMessage.data, 0, pendingMessage.size);
 
