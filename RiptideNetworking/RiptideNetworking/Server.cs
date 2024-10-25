@@ -311,7 +311,7 @@ namespace Riptide
                 case MessageHeader.Unreliable:
                 case MessageHeader.Reliable:
 				case MessageHeader.Queued:
-                    OnMessageReceived(message, connection, header);
+                    OnMessageReceived(message, connection);
                     break;
 
                 // Internal messages
@@ -539,10 +539,9 @@ namespace Riptide
         /// <summary>Invokes the <see cref="MessageReceived"/> event and initiates handling of the received message.</summary>
         /// <param name="message">The received message.</param>
         /// <param name="fromConnection">The client from which the message was received.</param>
-		/// <param name="header">The message header.</param>
-        protected virtual void OnMessageReceived(Message message, Connection fromConnection, MessageHeader header)
+        protected virtual void OnMessageReceived(Message message, Connection fromConnection)
         {
-            ushort messageId = message.GetMessageID(header);
+            ushort messageId = message.Id ?? throw new Exception($"Received message with no ID from {fromConnection}!");
             if (RelayFilter != null && RelayFilter.ShouldRelay(messageId))
             {
                 // The message should be automatically relayed to clients instead of being handled on the server

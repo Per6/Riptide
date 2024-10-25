@@ -158,22 +158,22 @@ namespace Riptide
         /// <summary>Handles data received by the transport.</summary>
         protected void HandleData(object _, DataReceivedEventArgs e)
         {
-            Message message = Message.Create(e.DataBuffer, e.Amount).GetInfo(out MessageHeader header);
+            Message message = new Message(e.DataBuffer, e.Amount, out ulong info);
+			MessageHeader header = message.Header;
 			
             if(message.SendMode == MessageSendMode.Notify) {
-				message.PrepareSendHeader(header, null);
-                e.FromConnection.ProcessNotify(e.Amount, message);
+                e.FromConnection.ProcessNotify(e.Amount, message, info);
             } else if(message.SendMode == MessageSendMode.Unreliable) {
                 messagesToHandle.Enqueue(new MessageToHandle(message, header, e.FromConnection));
                 e.FromConnection.Metrics.ReceivedUnreliable(e.Amount);
             } else if(message.SendMode == MessageSendMode.Queued) {
-				ushort sequenceId = message.GetUShort();
+				ushort sequenceId = (ushort)info;
 				foreach(Message m in e.FromConnection.QueuedMessagesToHandle(message, sequenceId))
 					messagesToHandle.Enqueue(new MessageToHandle(m, MessageHeader.Queued, e.FromConnection));
 				e.FromConnection.Send(Message.QueuedAck(sequenceId, true));
 			} else {
                 e.FromConnection.Metrics.ReceivedReliable(e.Amount);
-				ushort sequenceId = message.GetUShort();
+				ushort sequenceId = (ushort)info;
                 if(e.FromConnection.ShouldHandle(sequenceId))
                     messagesToHandle.Enqueue(new MessageToHandle(message, header, e.FromConnection));
                 else e.FromConnection.Metrics.ReliableDiscarded++;

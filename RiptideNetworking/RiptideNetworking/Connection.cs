@@ -207,7 +207,7 @@ namespace Riptide
                 Metrics.ReliableUniques++;
             } else throw new Exception("Invalid send mode");
 
-			message.ResetSendHeader();
+			message.RemoveSendHeader();
             return sequenceId;
         }
 
@@ -236,14 +236,17 @@ namespace Riptide
         /// <summary>Processes a notify message.</summary>
         /// <param name="amount">The number of bytes that were received.</param>
         /// <param name="message">The message instance to use.</param>
-        internal void ProcessNotify(int amount, Message message)
+		/// <param name="info">The information associated to the SendMode.</param>
+        internal void ProcessNotify(int amount, Message message, ulong info)
         {
-			ushort remoteLastReceivedSeqId = message.GetUShort();
-			byte remoteReceivedSeqIds = message.GetByte();
+			ushort remoteLastReceivedSeqId = (ushort)info;
+			info >>= sizeof(ushort) * 8;
+			byte remoteReceivedSeqIds = (byte)info;
+			info >>= sizeof(byte) * 8;
             notify.UpdateReceivedAcks(remoteLastReceivedSeqId, remoteReceivedSeqIds);
             Metrics.ReceivedNotify(amount);
 
-			ushort sequenceId = message.GetUShort();
+			ushort sequenceId = (ushort)info;
             if(notify.ShouldHandle(sequenceId))
                 NotifyReceived?.Invoke(message);
             else Metrics.NotifyDiscarded++;

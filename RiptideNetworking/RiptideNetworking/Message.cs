@@ -96,41 +96,54 @@ namespace Riptide
 				Data[0] |= ((ulong)value) << HeaderBits;
 			}
 		}
+		internal ushort? Id => sendHeader.id;
+		internal MessageHeader Header => sendHeader.header;
         /// <summary>How many of this message's bytes are in use.
 		/// Rounds up to the next byte because only whole bytes can be sent.</summary>
         public int BytesInUse => data.GetBytesInUse();
         /// <inheritdoc cref="data"/>
         internal ulong[] Data => data.GetData();
 
-		/// <summary>The message's send mode.</summary>
-        public MessageSendMode SendMode { get; private set; }
         /// <summary>The message's data.</summary>
         private FastBigInt data;
 		/// <summary>The mult for new values.</summary>
 		private FastBigInt writeValue;
+		/// <summary>The message's send mode.</summary>
+        public MessageSendMode SendMode { get; private set; }
+		/// <summary>The header necessary for sending the message.</summary>
+		private (MessageHeader header, ushort? id) sendHeader;
 		/// <summary>The current read bit of the message.</summary>
 		private int readBit = 0;
-		/// <summary>The header necessary for sending the message.</summary>
-		private (MessageHeader header, ushort? id)? sendHeader = null;
 
-        /// <summary>Initializes a reusable <see cref="Message"/> instance.</summary>
-        private Message() {
+        /// <summary>Initializes a <see cref="Message"/> instance.</summary>
+        private Message(MessageHeader header, ushort? id) {
 			if(InitialMessageSize < sizeof(ulong)) throw new InvalidOperationException($"'{nameof(InitialMessageSize)}' must be at least {sizeof(ulong)}!");
 			data = new FastBigInt(InitialMessageSize / sizeof(ulong));
 			writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
+			SendMode = GetMessageSendMode(header);
+			sendHeader = (header, id);
 		}
 
-        /// <summary>Creates a message that can be used for receiving/handling.</summary>
-        /// <param name="bytes">The bytes of the received data.</param>
-        /// <param name="contentLength">The number of bytes which this message will contain.</param>
-        /// <returns>The message, ready to be used for handling.</returns>
-        internal static Message Create(byte[] bytes, int contentLength) {
-            Message msg = new Message {
-                data = new FastBigInt(contentLength, bytes),
-                writeValue = new FastBigInt(contentLength, 1)
-            };
-            return msg;
+		/// <summary>Initializes a <see cref="Message"/> instance based on
+		/// the data recieved.</summary>
+		internal Message(byte[] bytes, int contentLength, out ulong info) {
+			data = new FastBigInt(contentLength, bytes);
+            writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
+			GetBits(out byte bitfield, HeaderBits);
+			MessageHeader header = (MessageHeader)bitfield;
+			SendMode = GetMessageSendMode(header);
+			switch(SendMode) {
+				case MessageSendMode.Notify: GetBits(out info, NotifyHeaderBits - HeaderBits); break;
+				case MessageSendMode.Unreliable: GetBits(out info, UnreliableHeaderBits - HeaderBits); break;
+				case MessageSendMode.Reliable: GetBits(out info, ReliableHeaderBits - HeaderBits); break;
+				case MessageSendMode.Queued: GetBits(out info, QueuedHeaderBits - HeaderBits); break;
+				default: throw new ArgumentOutOfRangeException();
+			}
+			ushort? id = null;
+			if(SendMode != MessageSendMode.Notify) id = GetUShort(0, MaxId);
+			sendHeader = (header, id);
 		}
+
         /// <summary>Gets a message instance that can be used for sending.</summary>
         /// <param name="sendMode">The mode in which the message should be sent.</param>
 		/// <param name="id">The message's ID.</param>
@@ -153,9 +166,7 @@ namespace Riptide
         /// <returns>A message instance ready to be sent.</returns>
         internal static Message Create(MessageHeader header, ushort? id = null)
         {
-			Message message = new Message();
-			message.PrepareSendHeader(header, id);
-            return message;
+			return new Message(header, id);
         }
 
 		/// <summary>Logs info of the message</summary>
@@ -164,43 +175,6 @@ namespace Riptide
 		}
 
         #region Functions
-        /// <summary>Sets the message's header bits to the given <paramref name="header"/> and determines the appropriate <see cref="MessageSendMode"/> and read/write positions.</summary>
-        /// <param name="header">The header to use for this message.</param>
-		/// <param name="messageId">The message ID.</param>
-        /// <returns>The message, ready to be used for sending.</returns>
-        private Message SetHeader(MessageHeader header, ushort? messageId) {
-			ulong mult;
-			SendMode = GetMessageSendMode(header);
-			switch(SendMode) {
-				case MessageSendMode.Notify: mult = 1 << NotifyHeaderBits; break;
-				case MessageSendMode.Queued: mult = 1 << QueuedHeaderBits; break;
-				case MessageSendMode.Reliable: mult = 1 << ReliableHeaderBits; break;
-				case MessageSendMode.Unreliable: mult = 1 << UnreliableHeaderBits; break;
-				default: throw new ArgumentOutOfRangeException(nameof(header), header, null);
-			}
-			ulong umid = 0;
-			if(messageId != null) {
-				if(messageId.Value > MaxId) throw new ArgumentOutOfRangeException(nameof(messageId), $"'{nameof(messageId)}' cannot be greater than {MaxId}!");
-				if(SendMode == MessageSendMode.Notify) throw new ArgumentException($"'{nameof(messageId)}' cannot be set for {nameof(MessageSendMode.Notify)} messages!", nameof(messageId));
-				umid = mult * messageId.Value;
-				mult *= MaxId + 1UL;
-			}
-			data.Mult(mult);
-			Data[0] += (ulong)header;
-			Data[0] += umid;
-			return this;
-        }
-
-		/// <summary>Gets the message's header and sets SendMode and resendHeader's header accordingly.</summary>
-		/// <param name="header">The header of the message.</param>
-		/// <returns>The message's header.</returns>
-		internal Message GetInfo(out MessageHeader header) {
-			GetBits(out byte bitfield, HeaderBits);
-			header = (MessageHeader)bitfield;
-			SendMode = GetMessageSendMode(header);
-			return this;
-		}
-
 		/// <summary>Gets the MessageSendMode from the header.</summary>
 		/// <param name="header">The header to attribute.</param>
 		/// <returns>The MessageSendMode attributed to the MessageHeader.</returns>
@@ -211,41 +185,45 @@ namespace Riptide
 			else return MessageSendMode.Unreliable;
 		}
 
-		/// <summary>Adds a sendHeader into the message, if necessary.</summary>
+		/// <summary>Adds a sendHeader into the message data.</summary>
 		internal void SetSendHeader() {
-			if(sendHeader == null) return;
 			ResetReadBit();
-			(MessageHeader header, ushort? id) = sendHeader.Value;
-			SetHeader(header, id);
-			sendHeader = null;
-		}
-
-		/// <summary>Sets the resendHeader.</summary>
-		/// <param name="header"></param>
-		/// <param name="id"></param>
-		internal void PrepareSendHeader(MessageHeader header, ushort? id) {
-			if(sendHeader != null) throw new Exception("resendHeader has already been set!");
-			sendHeader = (header, id);
-		}
-
-		/// <summary>Removes the sendHeader from the message data and stores it in the sendHeader.</summary>
-		/// <remarks>This is necessary when you send a message and want to read or write from/to it afterwards.</remarks>
-		internal void ResetSendHeader() {
-			if(sendHeader != null) return;
-			GetBits(out byte bitfield, HeaderBits);
-			MessageHeader header = (MessageHeader)bitfield;
-			MessageSendMode sendMode = GetMessageSendMode(header);
-			switch(sendMode) {
-				case MessageSendMode.Notify: GetBits(out ulong _, NotifyHeaderBits - HeaderBits); break;
-				case MessageSendMode.Queued: GetBits(out ulong _, QueuedHeaderBits - HeaderBits); break;
-				case MessageSendMode.Reliable: GetBits(out ulong _, ReliableHeaderBits - HeaderBits); break;
-				case MessageSendMode.Unreliable: GetBits(out ulong _, UnreliableHeaderBits - HeaderBits); break;
+			(MessageHeader header, ushort? id) = sendHeader;
+			ulong mult;
+			SendMode = GetMessageSendMode(header);
+			switch(SendMode) {
+				case MessageSendMode.Notify: mult = 1 << NotifyHeaderBits; break;
+				case MessageSendMode.Queued: mult = 1 << QueuedHeaderBits; break;
+				case MessageSendMode.Reliable: mult = 1 << ReliableHeaderBits; break;
+				case MessageSendMode.Unreliable: mult = 1 << UnreliableHeaderBits; break;
 				default: throw new ArgumentOutOfRangeException(nameof(header), header, null);
 			}
-			ushort? id = null;
-			if(sendMode != MessageSendMode.Notify) id = GetUShort(0, MaxId);
-			ResetReadBit();
-			sendHeader = (header, id);
+			ulong umid = 0;
+			if(id != null) {
+				if(id.Value > MaxId) throw new ArgumentOutOfRangeException(nameof(id), $"'{nameof(id)}' cannot be greater than {MaxId}!");
+				if(SendMode == MessageSendMode.Notify) throw new ArgumentException($"'{nameof(id)}' cannot be set for {nameof(MessageSendMode.Notify)} messages!", nameof(id));
+				umid = mult * id.Value;
+				mult *= MaxId + 1UL;
+			}
+			data.Mult(mult);
+			Data[0] += (ulong)header;
+			Data[0] += umid;
+		}
+
+		/// <summary>Removes the sendHeader from the message data.</summary>
+		/// <remarks>This is necessary when you send a message and want to read or write from/to it afterwards.</remarks>
+		internal void RemoveSendHeader() {
+			MessageSendMode sendMode = GetMessageSendMode(Header);
+			ulong div;
+			switch(sendMode) {
+				case MessageSendMode.Notify: div = 1 << NotifyHeaderBits; break;
+				case MessageSendMode.Queued: div = 1 << QueuedHeaderBits; break;
+				case MessageSendMode.Reliable: div = 1 << ReliableHeaderBits; break;
+				case MessageSendMode.Unreliable: div = 1 << UnreliableHeaderBits; break;
+				default: throw new ArgumentOutOfRangeException(nameof(sendMode), sendMode, null);
+			}
+			if(sendMode != MessageSendMode.Notify) div *= MaxId + 1UL;
+			data.DivReturnMod(div);
 		}
 
 		/// <summary>Divides data by 2^readBit, so the readBit can go back to 0.</summary>
@@ -253,6 +231,29 @@ namespace Riptide
 			data.RightShiftArbitrary(readBit);
 			readBit = 0;
 		}
+
+		/// <summary>Copies a message.</summary>
+		/// <returns>The copy of the message.</returns>
+		public Message Copy() {
+            Message message = new Message(sendHeader.header, sendHeader.id) {
+                SendMode = SendMode,
+				data = data.Copy(),
+                writeValue = writeValue.Copy(),
+				readBit = readBit,
+            };
+			return message;
+        }
+
+		/// <summary>Creates a QueuedAck message containing sequence ID.</summary>
+		/// <param name="sequenceId">The sequence id to queue.</param>
+		/// <param name="successfull">Whether or not the sequence was successful or needs to be resent.</param>
+		/// <returns>The new message.</returns>
+		internal static Message QueuedAck(ushort sequenceId, bool successfull) {
+            Message message = Create(MessageHeader.QueuedAck);
+			message.AddUShort(sequenceId);
+			message.AddBool(successfull);
+			return message;
+        }
         #endregion
 
         #region Add & Retrieve Data
@@ -264,13 +265,9 @@ namespace Riptide
 		/// <remarks>This method does not move <paramref name="message"/>'s internal read position!</remarks>
 		public Message AddMessage(Message message, bool takeSendHeader = false)
 		{
-			message.ResetSendHeader();
 			message.ResetReadBit();
-			if(takeSendHeader) {
-				ResetSendHeader();
-				sendHeader = message.sendHeader;
-			}
 			ResetReadBit();
+			if(takeSendHeader) sendHeader = message.sendHeader;
 			BigInteger d1 = (BigInteger)data;
 			BigInteger d2 = (BigInteger)message.data;
 			BigInteger m1 = (BigInteger)writeValue;
@@ -324,39 +321,6 @@ namespace Riptide
         #endregion
 
         #region Varint
-		/// <summary>Copies a message.</summary>
-		/// <returns>The copy of the message.</returns>
-		public Message Copy() {
-            Message message = new Message {
-                SendMode = SendMode,
-				data = data.Copy(),
-                writeValue = writeValue.Copy(),
-				readBit = readBit,
-				sendHeader = sendHeader
-            };
-			return message;
-        }
-
-		/// <summary>Gets the messageId of a message and prepares it for resending.</summary>
-		/// <returns>The message's Id.</returns>
-		internal ushort GetMessageID(MessageHeader header) {
-			ushort messageId = GetUShort(0, MaxId);
-			if(sendHeader != null) throw new Exception("Message's sendHeader is not null!");
-			PrepareSendHeader(header, messageId);
-			return messageId;
-		}
-
-		/// <summary>Creates a QueuedAck message containing sequence ID.</summary>
-		/// <param name="sequenceId">The sequence id to queue.</param>
-		/// <param name="successfull">Whether or not the sequence was successful or needs to be resent.</param>
-		/// <returns>The new message.</returns>
-		internal static Message QueuedAck(ushort sequenceId, bool successfull) {
-            Message message = Create(MessageHeader.QueuedAck);
-			message.AddUShort(sequenceId);
-			message.AddBool(successfull);
-			return message;
-        }
-
         /// <summary>Adds a positive or negative number to the message, using fewer bits for smaller values.</summary>
         /// <inheritdoc cref="AddVarULong(ulong)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
