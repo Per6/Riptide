@@ -96,8 +96,6 @@ namespace Riptide
 				Data[0] |= ((ulong)value) << HeaderBits;
 			}
 		}
-		internal ushort? Id => sendHeader.id;
-		internal MessageHeader Header => sendHeader.header;
         /// <summary>How many of this message's bytes are in use.
 		/// Rounds up to the next byte because only whole bytes can be sent.</summary>
         public int BytesInUse => data.GetBytesInUse();
@@ -111,9 +109,12 @@ namespace Riptide
 		/// <summary>The message's send mode.</summary>
         public MessageSendMode SendMode { get; private set; }
 		/// <summary>The header necessary for sending the message.</summary>
-		private (MessageHeader header, ushort? id) sendHeader;
+		internal (MessageHeader header, ushort? id) SendHeader { get; private set; }
 		/// <summary>The current read bit of the message.</summary>
 		private int readBit = 0;
+
+        /// <summary>Initializes a <see cref="Message"/> instance.</summary>
+		private Message() {}
 
         /// <summary>Initializes a <see cref="Message"/> instance.</summary>
         private Message(MessageHeader header, ushort? id) {
@@ -121,7 +122,7 @@ namespace Riptide
 			data = new FastBigInt(InitialMessageSize / sizeof(ulong));
 			writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
 			SendMode = GetMessageSendMode(header);
-			sendHeader = (header, id);
+			SendHeader = (header, id);
 		}
 
 		/// <summary>Initializes a <see cref="Message"/> instance based on
@@ -140,8 +141,9 @@ namespace Riptide
 				default: throw new ArgumentOutOfRangeException();
 			}
 			ushort? id = null;
-			if(SendMode != MessageSendMode.Notify) id = GetUShort(0, MaxId);
-			sendHeader = (header, id);
+			if(header == MessageHeader.Unreliable || header == MessageHeader.Reliable
+				|| header == MessageHeader.Queued) id = GetUShort(0, MaxId);
+			SendHeader = (header, id);
 		}
 
         /// <summary>Gets a message instance that can be used for sending.</summary>
@@ -171,8 +173,21 @@ namespace Riptide
 
 		/// <summary>Logs info of the message</summary>
 		public void LogStuff(string added = "") {
-			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nSendMode: {SendMode}\nRead Bit: {readBit}\nSend Header: {sendHeader}\n{added}");
+			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nSendMode: {SendMode}\nRead Bit: {readBit}\nSend Header: {SendHeader}\n{added}");
 		}
+
+		/// <summary>Copies a message.</summary>
+		/// <returns>The copy of the message.</returns>
+		public Message Copy() {
+            Message message = new Message() {
+				data = data.Copy(),
+                writeValue = writeValue.Copy(),
+                SendMode = SendMode,
+				readBit = readBit,
+				SendHeader = SendHeader,
+            };
+			return message;
+        }
 
         #region Functions
 		/// <summary>Gets the MessageSendMode from the header.</summary>
@@ -188,9 +203,9 @@ namespace Riptide
 		/// <summary>Adds a sendHeader into the message data.</summary>
 		internal void SetSendHeader() {
 			ResetReadBit();
-			(MessageHeader header, ushort? id) = sendHeader;
-			ulong mult;
+			(MessageHeader header, ushort? id) = SendHeader;
 			SendMode = GetMessageSendMode(header);
+			ulong mult;
 			switch(SendMode) {
 				case MessageSendMode.Notify: mult = 1 << NotifyHeaderBits; break;
 				case MessageSendMode.Queued: mult = 1 << QueuedHeaderBits; break;
@@ -213,16 +228,15 @@ namespace Riptide
 		/// <summary>Removes the sendHeader from the message data.</summary>
 		/// <remarks>This is necessary when you send a message and want to read or write from/to it afterwards.</remarks>
 		internal void RemoveSendHeader() {
-			MessageSendMode sendMode = GetMessageSendMode(Header);
 			ulong div;
-			switch(sendMode) {
+			switch(SendMode) {
 				case MessageSendMode.Notify: div = 1 << NotifyHeaderBits; break;
 				case MessageSendMode.Queued: div = 1 << QueuedHeaderBits; break;
 				case MessageSendMode.Reliable: div = 1 << ReliableHeaderBits; break;
 				case MessageSendMode.Unreliable: div = 1 << UnreliableHeaderBits; break;
-				default: throw new ArgumentOutOfRangeException(nameof(sendMode), sendMode, null);
+				default: throw new ArgumentOutOfRangeException(nameof(SendMode), SendMode, null);
 			}
-			if(sendMode != MessageSendMode.Notify) div *= MaxId + 1UL;
+			if(SendHeader.id != null) div *= MaxId + 1UL;
 			data.DivReturnMod(div);
 		}
 
@@ -231,18 +245,6 @@ namespace Riptide
 			data.RightShiftArbitrary(readBit);
 			readBit = 0;
 		}
-
-		/// <summary>Copies a message.</summary>
-		/// <returns>The copy of the message.</returns>
-		public Message Copy() {
-            Message message = new Message(sendHeader.header, sendHeader.id) {
-                SendMode = SendMode,
-				data = data.Copy(),
-                writeValue = writeValue.Copy(),
-				readBit = readBit,
-            };
-			return message;
-        }
 
 		/// <summary>Creates a QueuedAck message containing sequence ID.</summary>
 		/// <param name="sequenceId">The sequence id to queue.</param>
@@ -260,22 +262,22 @@ namespace Riptide
         #region Message
 		/// <summary>Adds a <see cref="Message"/> to the message.</summary>
 		/// <param name="message">The message to add.</param>
-		/// <param name="takeSendHeader">Wether to take on the send Header as specified in Create</param>
+		/// <param name="takeSendHeader">Wether to take on the send Header as specified in Create.</param>
 		/// <returns>The message that the message was added to.</returns>
 		/// <remarks>This method does not move <paramref name="message"/>'s internal read position!</remarks>
 		public Message AddMessage(Message message, bool takeSendHeader = false)
 		{
 			message.ResetReadBit();
 			ResetReadBit();
-			if(takeSendHeader) sendHeader = message.sendHeader;
-			BigInteger d1 = (BigInteger)data;
-			BigInteger d2 = (BigInteger)message.data;
-			BigInteger m1 = (BigInteger)writeValue;
-			BigInteger m2 = (BigInteger)message.writeValue;
-			d1 += d2 * m1;
-			m1 *= m2;
-			data = (FastBigInt)d1;
-			writeValue = (FastBigInt)m1;
+			if(takeSendHeader) SendHeader = message.SendHeader;
+			BigInteger data1 = (BigInteger)data;
+			BigInteger data2 = (BigInteger)message.data;
+			BigInteger write1 = (BigInteger)writeValue;
+			BigInteger write2 = (BigInteger)message.writeValue;
+			data1 += data2 * write1;
+			write1 *= write2;
+			data = (FastBigInt)data1;
+			writeValue = (FastBigInt)write1;
 			return this;
 		}
         #endregion

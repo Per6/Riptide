@@ -541,7 +541,7 @@ namespace Riptide
         /// <param name="fromConnection">The client from which the message was received.</param>
         protected virtual void OnMessageReceived(Message message, Connection fromConnection)
         {
-            ushort messageId = message.Id ?? throw new Exception($"Received message with no ID from {fromConnection}!");
+            ushort messageId = message.SendHeader.id ?? throw new Exception($"Received message with no ID from {fromConnection}!");
             if (RelayFilter != null && RelayFilter.ShouldRelay(messageId))
             {
                 // The message should be automatically relayed to clients instead of being handled on the server

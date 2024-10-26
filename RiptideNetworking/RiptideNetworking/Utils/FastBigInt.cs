@@ -210,7 +210,8 @@ namespace Riptide.Utils
 			}
 			minIndex -= shiftUlongs;
 			if(minIndex < 0) minIndex = 0;
-			AdjustMinAndMax();
+			maxIndex -= shiftUlongs;
+			if(maxIndex < 0) maxIndex = 0;
 			RightShift((byte)shiftBits);
 		}
 

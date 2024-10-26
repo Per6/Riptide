@@ -4,6 +4,7 @@
 // https://github.com/RiptideNetworking/Riptide/blob/main/LICENSE.md
 
 using System;
+using System.Collections.Generic;
 
 namespace Riptide.Utils
 {
@@ -112,16 +113,19 @@ namespace Riptide.Utils
 
 		internal static string SwapValues(string value, (char val, char rep)[] replacements) {
 			if(replacements == null || replacements.Length == 0) return value;
+
+			Dictionary<char, char> replacementDict = new Dictionary<char, char>();
+			foreach((char val, char rep) in replacements) {
+				if(replacementDict.ContainsKey(val)) throw new ArgumentException($"Duplicate character found in replacements: '{val}'");
+				if(replacementDict.ContainsKey(rep)) throw new ArgumentException($"Duplicate replacement character found in replacements: '{rep}'");
+				replacementDict.Add(rep, val);
+				replacementDict.Add(val, rep);
+			}
+
 			char[] valueChars = value.ToCharArray();
 			for(int i = 0; i < valueChars.Length; i++) {
-				for(int j = 0; j < replacements.Length; j++) {
-					if(valueChars[i] == replacements[j].val)
-						valueChars[i] = replacements[j].rep;
-					else if(valueChars[i] == replacements[j].rep)
-						valueChars[i] = replacements[j].val;
-					else continue;
-					break;
-				}
+				if(!replacementDict.TryGetValue(valueChars[i], out char replacement)) continue;
+				valueChars[i] = replacement;
 			}
 			return new string(valueChars);
 		}

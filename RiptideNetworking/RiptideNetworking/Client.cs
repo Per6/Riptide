@@ -378,7 +378,7 @@ namespace Riptide
         /// <param name="message">The received message.</param>
         protected virtual void OnMessageReceived(Message message)
         {
-            ushort messageId = message.Id ?? throw new Exception($"Received message with no ID!");
+            ushort messageId = message.SendHeader.id ?? throw new Exception($"Received message with no ID!");
             MessageReceived?.Invoke(this, new MessageReceivedEventArgs(connection, messageId, message));
 
             if (useMessageHandlers)
