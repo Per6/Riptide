@@ -1,5 +1,5 @@
 // This file is provided under The MIT License as part of RiptideNetworking.
-// Copyright (c) Tom Weiland
+// Copyright (c) not Tom Weiland but me https://github.com/Per6
 // For additional information please see the included LICENSE.md file or view it on GitHub:
 // https://github.com/RiptideNetworking/Riptide/blob/main/LICENSE.md
 
@@ -11,7 +11,7 @@ namespace Riptide.Utils
 {
 	/// <summary>A list, that can remove and add the first element in O(1) time.</summary>
 	/// <remarks>I also added SetUnchecked, since it was useful.</remarks>
-	/// <typeparam name="T"></typeparam>
+	/// <typeparam name="T">The type of the elements of the list.</typeparam>
     internal class WrappingList<T> : IEnumerable<T>
 	{
 		private T[] buffer;
@@ -19,7 +19,8 @@ namespace Riptide.Utils
 		private int count;
 
 		internal WrappingList(int initialCapacity = 16) {
-			buffer = new T[initialCapacity];
+			if(initialCapacity < 1) throw new ArgumentOutOfRangeException(nameof(initialCapacity));
+			buffer = new T[NextPowerOfTwo(initialCapacity)];
 			start = 0;
 			count = 0;
 		}

@@ -46,5 +46,15 @@ namespace Riptide
             MessageId = messageId;
             GroupId = groupId;
         }
+
+		/// <inheritdoc cref="MessageHandlerAttribute(ushort, byte)"/>
+        /// <remarks>NOTE: You need to ensure that its type is an <see cref="Enum"/> : <see cref="ushort"/>.</remarks>
+        public MessageHandlerAttribute(object messageId, byte groupId = 0)
+        {
+			if(!(messageId is Enum enumValue)) throw new ArgumentException("Message ID must be an enum value.", nameof(messageId));
+			if(Enum.GetUnderlyingType(enumValue.GetType()) != typeof(ushort)) throw new ArgumentException("Message ID enum value must be of type ushort.", nameof(messageId));
+            MessageId = (ushort)messageId;
+            GroupId = groupId;
+        }
     }
 }
