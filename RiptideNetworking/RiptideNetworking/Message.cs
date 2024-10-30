@@ -96,6 +96,10 @@ namespace Riptide
 				Data[0] |= ((ulong)value) << HeaderBits;
 			}
 		}
+		/// <summary>The Id of a message.</summary>
+		public ushort? Id => SendHeader.id;
+		/// <summary>The Header of the message.</summary>
+		public MessageHeader Header => SendHeader.header;
         /// <summary>How many of this message's bytes are in use.
 		/// Rounds up to the next byte because only whole bytes can be sent.</summary>
         public int BytesInUse => data.GetBytesInUse();
@@ -269,6 +273,8 @@ namespace Riptide
 		{
 			message.ResetReadBit();
 			ResetReadBit();
+			if(writeValue <= data) throw new ArgumentException("First read all the data of a message before adding new data", nameof(data));
+			if(message.writeValue <= message.data) throw new ArgumentException(nameof(message), $"Cannot add a message with unknown write value! (All recieved messages don't know how many possible states have been written to it)\n{message.data}\n{message.writeValue}");
 			if(takeSendHeader) SendHeader = message.SendHeader;
 			BigInteger data1 = (BigInteger)data;
 			BigInteger data2 = (BigInteger)message.data;
@@ -1055,6 +1061,7 @@ namespace Riptide
         /// <returns>The message that the <see cref="ulong"/> was added to.</returns>
 		public Message AddULong(ulong value, ulong min = ulong.MinValue, ulong max = ulong.MaxValue) {
 			if(value > max || value < min) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be between {min} and {max} (inclusive)");
+			if(writeValue <= data) throw new ArgumentException("First read all the data of a message before adding new data", nameof(data));
 			data.Add(writeValue, value - min);
 			if(max - min >= (ulong.MaxValue >> 1)) writeValue.LeftShift1ULong();
 			else writeValue.Mult(max - min + 1);

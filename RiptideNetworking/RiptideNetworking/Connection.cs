@@ -240,9 +240,9 @@ namespace Riptide
         internal void ProcessNotify(int amount, Message message, ulong info)
         {
 			ushort remoteLastReceivedSeqId = (ushort)info;
-			info >>= sizeof(ushort) * 8;
+			info >>= sizeof(ushort) * Converter.BitsPerByte;
 			byte remoteReceivedSeqIds = (byte)info;
-			info >>= sizeof(byte) * 8;
+			info >>= sizeof(byte) * Converter.BitsPerByte;
             notify.UpdateReceivedAcks(remoteLastReceivedSeqId, remoteReceivedSeqIds);
             Metrics.ReceivedNotify(amount);
 

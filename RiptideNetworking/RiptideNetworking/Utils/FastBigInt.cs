@@ -47,6 +47,20 @@ namespace Riptide.Utils
 			return result;
 		}
 
+		public static bool operator <=(FastBigInt a, FastBigInt b) => Compare(a, b, (x, y) => x <= y);
+		public static bool operator >=(FastBigInt a, FastBigInt b) => Compare(a, b, (x, y) => x >= y);
+		public static bool operator <(FastBigInt a, FastBigInt b) => Compare(a, b, (x, y) => x < y);
+		public static bool operator >(FastBigInt a, FastBigInt b) => Compare(a, b, (x, y) => x > y);
+
+		private static bool Compare(FastBigInt a, FastBigInt b, Func<ulong, ulong, bool> comparator) {
+			if(a.maxIndex != b.maxIndex) return comparator((ulong)a.maxIndex, (ulong)b.maxIndex);
+			for(int i = a.maxIndex; i >= a.minIndex; i--) {
+				if(a.data[i] == b.data[i]) continue;
+				return comparator(a.data[i], b.data[i]);
+			}
+			return comparator((ulong)b.minIndex, (ulong)a.minIndex);
+		}
+
 		internal FastBigInt Copy() {
 			FastBigInt copy = new FastBigInt(data.Length);
 			Buffer.BlockCopy(data, 0, copy.data, 0, data.Length * sizeof(ulong));
@@ -122,7 +136,7 @@ namespace Riptide.Utils
 				int off = i + offset;
 				(data[off], carry) = SubUlongs(data[off], slice.data[i], carry);
 			}
-			if(carry != 0) throw new OverflowException("Subtraction overflow.");
+			if(carry != 0) throw new OverflowException("Subtraction underflow.");
 			AdjustMinAndMax();
 		}
 
