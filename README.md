@@ -4,7 +4,11 @@
   </a>
 </div>
 <div align="center"><a href="https://riptide.tomweiland.net">Docs</a>&emsp;<b>•</b>&emsp;<a href="https://discord.gg/tomweiland">Discord</a>&emsp;<b>•</b>&emsp;<a href="https://github.com/sponsors/tom-weiland">Donate</a></div>
-<h1 align="center">Riptide Networking</h1>
+<h1 align="center">Riptide Networking +CQ</h1>
+
+This is a Fork of Riptide Networking, that adds a queued send mode, which ensures order and reliability of messages. It also adds the ability to easily compact data to
+log2(possible states) bits instead of riptides best of
+Ceil(log2(possible states)) bits, which was also more complicated to set up.
 
 Riptide Networking is a lightweight C# networking library primarily designed for use in multiplayer games. It can be used in Unity as well as in other .NET environments such as console applications.
 

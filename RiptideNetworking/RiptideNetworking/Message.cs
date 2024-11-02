@@ -286,6 +286,15 @@ namespace Riptide
 			writeValue = (FastBigInt)write1;
 			return this;
 		}
+
+		/// <summary>Sets the send header of the message.</summary>
+		/// <param name="header">The header to set.</param>
+		/// <param name="id">The id to set.</param>
+		/// <returns>The message that the send header was set on.</returns>
+		public Message SetSendHeader(MessageHeader header, byte? id) {
+			SendHeader = (header, id);
+			return this;
+		}
         #endregion
 
         #region Bits

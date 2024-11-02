@@ -37,9 +37,6 @@ namespace Riptide.Utils
 		internal static bool IsRealNumber(this float value)
 			=> !float.IsNaN(value) && !float.IsInfinity(value);
 
-		internal static float RemoveBits(this float value, int bits)
-			=> (value.ToUInt() & ~(uint)GetMask(bits)).ToFloat();
-
 		internal static unsafe uint ConvUInt(this float value) {
 			int i = *(int*)&value;
 			if(i < 0) i = int.MaxValue - i;
@@ -54,9 +51,6 @@ namespace Riptide.Utils
 
 		internal static bool IsRealNumber(this double value)
 			=> !double.IsNaN(value) && !double.IsInfinity(value);
-
-		internal static double RemoveBits(this double value, int bits)
-			=> (value.ToULong() & ~GetMask(bits)).ToDouble();
 
 		internal static unsafe ulong ConvULong(this double value) {
 			long l = *(long*)&value;
