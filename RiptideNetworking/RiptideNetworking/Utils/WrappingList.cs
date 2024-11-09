@@ -65,6 +65,8 @@ namespace Riptide.Utils
 			this[--count] = default;
 		}
 
+		internal T Last() => this[count - 1];
+
 		internal void Clear() {
 			Array.Clear(buffer, 0, count);
 			start = 0;

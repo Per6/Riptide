@@ -45,7 +45,7 @@ namespace Riptide
             }
         }
 		/// <summary>The time untill the client disconnects.</summary>
-		public long TimeUntilDisconnect => connection is null
+		public long TimeUntilDisconnect => connection is null || !connection.CanTimeout
 			? -1
 			: Math.Max(0, connection.LastHeartbeat + connection.TimeoutTime - CurrentTime);
         /// <summary>Whether or not the client is currently <i>not</i> trying to connect, pending, nor actively connected.</summary>

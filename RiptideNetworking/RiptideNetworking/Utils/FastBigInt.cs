@@ -79,7 +79,7 @@ namespace Riptide.Utils
 		}
 
 		public override string ToString() {
-			StringBuilder s = new StringBuilder(2 * (maxIndex) + 6);
+			StringBuilder s = new StringBuilder(2 * maxIndex + 6);
 			for(int i = 0; i <= maxIndex; i++) {
 				s.Append(Convert.ToString((long)data[i], 2).PadLeft(64, '0'));
 				s.Append(' ');

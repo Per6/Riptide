@@ -158,15 +158,15 @@ namespace Riptide
         /// <summary>Handles data received by the transport.</summary>
         protected void HandleData(object _, DataReceivedEventArgs e)
         {
-            Message message = new Message(e.DataBuffer, e.Amount, out ulong info);
+            Message message = new Message(e.DataBuffer, e.Amount, out ulong info, out MessageSendMode sendMode);
 			MessageHeader header = message.SendHeader.header;
 			
-            if(message.SendMode == MessageSendMode.Notify) {
+            if(sendMode == MessageSendMode.Notify) {
                 e.FromConnection.ProcessNotify(e.Amount, message, info);
-            } else if(message.SendMode == MessageSendMode.Unreliable) {
+            } else if(sendMode == MessageSendMode.Unreliable) {
                 messagesToHandle.Enqueue(new MessageToHandle(message, header, e.FromConnection));
                 e.FromConnection.Metrics.ReceivedUnreliable(e.Amount);
-            } else if(message.SendMode == MessageSendMode.Queued) {
+            } else if(sendMode == MessageSendMode.Queued) {
 				ushort sequenceId = (ushort)info;
 				foreach(Message m in e.FromConnection.QueuedMessagesToHandle(message, sequenceId))
 					messagesToHandle.Enqueue(new MessageToHandle(m, MessageHeader.Queued, e.FromConnection));

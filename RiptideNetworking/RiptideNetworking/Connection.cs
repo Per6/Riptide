@@ -28,7 +28,7 @@ namespace Riptide
     public abstract class Connection
     {
         /// <summary>The Queue storing the messages for the send mode Queued.</summary>
-        private readonly WrappingList<Message> messageQueue = new WrappingList<Message>();
+        private readonly WrappingList<PendingQueuedMessage> messageQueue = new WrappingList<PendingQueuedMessage>();
         /// <summary>The next send sequence id for the send mode Queued.</summary>
         private ushort nextQueuedSequenceId = 0;
 		/// <summary>The next recieve sequence id for the send mode Queued.</summary>
@@ -176,28 +176,29 @@ namespace Riptide
         /// <returns>For reliable, queued and notify messages, the sequence ID that the message was sent with. 0 for unreliable messages.</returns>
         public ushort Send(Message message)
         {
-			message.SetSendHeader();
+			MessageSendMode sendMode = message.SetSendHeader();
 			if(message.BytesInUse >= Message.MaxSize) throw new Exception($"Message is too large to send {message.BytesInUse} with max of {Message.MaxSize}. Consider splitting it up or increasing Message.MaxPayloadSize at the cost of either reliability or resend attempts.");
             ushort sequenceId = 0;
-            if (message.SendMode == MessageSendMode.Notify)
+
+            if (sendMode == MessageSendMode.Notify)
             {
                 sequenceId = notify.InsertHeader(message);
                 int byteAmount = SendData(message);
                 Metrics.SentNotify(byteAmount);
             }
-            else if (message.SendMode == MessageSendMode.Unreliable)
+            else if (sendMode == MessageSendMode.Unreliable)
             {
                 int byteAmount = SendData(message);
                 Metrics.SentUnreliable(byteAmount);
             }
-			else if (message.SendMode == MessageSendMode.Queued) {
+			else if (sendMode == MessageSendMode.Queued) {
 				sequenceId = nextQueuedSequenceId++;
 				message.SequenceId = sequenceId;
-				messageQueue.Add(message.Copy());
+				messageQueue.Add(new PendingQueuedMessage(message, this));
 				if(messageQueue.Count <= MaxSynchronousQueuedMessages)
-					SendData(message);
+					messageQueue.Last().TrySend();
 			}
-            else if (message.SendMode == MessageSendMode.Reliable)
+            else if (sendMode == MessageSendMode.Reliable)
             {
                 sequenceId = reliable.NextSequenceId;
 				message.SequenceId = sequenceId;
@@ -217,15 +218,16 @@ namespace Riptide
 		private int SendData(Message message) {
 			int byteAmount = message.BytesInUse;
 			Buffer.BlockCopy(message.Data, 0, Message.ByteBuffer, 0, byteAmount);
+			if(byteAmount >= 1 && Message.ByteBuffer[byteAmount - 1] == 0) throw new Exception("Message data should not be ending with a zero byte!");
 			Send(Message.ByteBuffer, byteAmount);
 			return byteAmount;
 		}
 
 		/// <summary>Resends the queued message at listId.</summary>
         private void ResendQueuedMessage(ushort listId) {
-			Message msg = messageQueue[listId];
+			PendingQueuedMessage msg = messageQueue[listId];
 			if(msg == null) return;
-			SendData(msg);
+			msg.TrySend();
 		}
 
         /// <summary>Sends data.</summary>
@@ -279,7 +281,7 @@ namespace Riptide
 		/// <summary>Resends the first message from the queue.</summary>
 		internal void ResendFirstQueuedMessage() {
 			if(messageQueue.Count == 0) return;
-			SendData(messageQueue[0]);
+			messageQueue[0].TrySend();
 		}
 
         /// <summary>Determines if the message with the given sequence ID should be handled.</summary>
@@ -404,16 +406,14 @@ namespace Riptide
 				ResendQueuedMessage(listId);
 				return;
 			}
-			Message qm = messageQueue[listId];
+			PendingQueuedMessage qm = messageQueue[listId];
 			messageQueue[listId] = null;
-			if(qm != null) {
-				if(qm.SequenceId != ackedSeqId) throw new Exception($"Acked sequence ID {ackedSeqId} does not match queued message sequence ID {qm.SequenceId}. Count: {messageQueue.Count}. Next: {nextQueuedSequenceId}. ListId: {listId}");
-			}
+			if(qm != null && qm.SequenceId != ackedSeqId) throw new Exception($"Acked sequence ID {ackedSeqId} does not match queued message sequence ID {qm.SequenceId}. Count: {messageQueue.Count}. Next: {nextQueuedSequenceId}. ListId: {listId}");
 			while((messageQueue.Count > 0) && (messageQueue[0] == null)) {
 				messageQueue.RemoveFirst();
 				if(messageQueue.Count >= MaxSynchronousQueuedMessages
 					&& messageQueue[MaxSynchronousQueuedMessages - 1] != null)
-					SendData(messageQueue[MaxSynchronousQueuedMessages - 1]);
+					messageQueue[MaxSynchronousQueuedMessages - 1].TrySend();
 			}
 		}
 

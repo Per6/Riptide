@@ -110,8 +110,6 @@ namespace Riptide
         private FastBigInt data;
 		/// <summary>The mult for new values.</summary>
 		private FastBigInt writeValue;
-		/// <summary>The message's send mode.</summary>
-        public MessageSendMode SendMode { get; private set; }
 		/// <summary>The header necessary for sending the message.</summary>
 		internal (MessageHeader header, ushort? id) SendHeader { get; private set; }
 		/// <summary>The current read bit of the message.</summary>
@@ -125,19 +123,18 @@ namespace Riptide
 			if(InitialMessageSize < sizeof(ulong)) throw new InvalidOperationException($"'{nameof(InitialMessageSize)}' must be at least {sizeof(ulong)}!");
 			data = new FastBigInt(InitialMessageSize / sizeof(ulong));
 			writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
-			SendMode = GetMessageSendMode(header);
 			SendHeader = (header, id);
 		}
 
 		/// <summary>Initializes a <see cref="Message"/> instance based on
 		/// the data recieved.</summary>
-		internal Message(byte[] bytes, int contentLength, out ulong info) {
+		internal Message(byte[] bytes, int contentLength, out ulong info, out MessageSendMode sendMode) {
 			data = new FastBigInt(contentLength, bytes);
-            writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
+            writeValue = new FastBigInt(1, 1);
 			GetBits(out byte bitfield, HeaderBits);
 			MessageHeader header = (MessageHeader)bitfield;
-			SendMode = GetMessageSendMode(header);
-			switch(SendMode) {
+			sendMode = GetMessageSendMode(header);
+			switch(sendMode) {
 				case MessageSendMode.Notify: GetBits(out info, NotifyHeaderBits - HeaderBits); break;
 				case MessageSendMode.Unreliable: GetBits(out info, UnreliableHeaderBits - HeaderBits); break;
 				case MessageSendMode.Reliable: GetBits(out info, ReliableHeaderBits - HeaderBits); break;
@@ -177,7 +174,7 @@ namespace Riptide
 
 		/// <summary>Logs info of the message</summary>
 		public void LogStuff(string added = "") {
-			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nSendMode: {SendMode}\nRead Bit: {readBit}\nSend Header: {SendHeader}\n{added}");
+			RiptideLogger.Log(LogType.Info, $"{data}\n{writeValue}\nRead Bit: {readBit}\nSend Header: {SendHeader}\n{added}");
 		}
 
 		/// <summary>Copies a message.</summary>
@@ -186,7 +183,6 @@ namespace Riptide
             Message message = new Message() {
 				data = data.Copy(),
                 writeValue = writeValue.Copy(),
-                SendMode = SendMode,
 				readBit = readBit,
 				SendHeader = SendHeader,
             };
@@ -205,12 +201,12 @@ namespace Riptide
 		}
 
 		/// <summary>Adds a sendHeader into the message data.</summary>
-		internal void SetSendHeader() {
+		internal MessageSendMode SetSendHeader() {
 			ResetReadBit();
 			(MessageHeader header, ushort? id) = SendHeader;
-			SendMode = GetMessageSendMode(header);
+			MessageSendMode sendMode = GetMessageSendMode(header);
 			ulong mult;
-			switch(SendMode) {
+			switch(sendMode) {
 				case MessageSendMode.Notify: mult = 1 << NotifyHeaderBits; break;
 				case MessageSendMode.Queued: mult = 1 << QueuedHeaderBits; break;
 				case MessageSendMode.Reliable: mult = 1 << ReliableHeaderBits; break;
@@ -220,25 +216,27 @@ namespace Riptide
 			ulong umid = 0;
 			if(id != null) {
 				if(id.Value > MaxId) throw new ArgumentOutOfRangeException(nameof(id), $"'{nameof(id)}' cannot be greater than {MaxId}!");
-				if(SendMode == MessageSendMode.Notify) throw new ArgumentException($"'{nameof(id)}' cannot be set for {nameof(MessageSendMode.Notify)} messages!", nameof(id));
+				if(sendMode == MessageSendMode.Notify) throw new ArgumentException($"'{nameof(id)}' cannot be set for {nameof(MessageSendMode.Notify)} messages!", nameof(id));
 				umid = mult * id.Value;
 				mult *= MaxId + 1UL;
 			}
 			data.Mult(mult);
 			Data[0] += (ulong)header;
 			Data[0] += umid;
+			return sendMode;
 		}
 
 		/// <summary>Removes the sendHeader from the message data.</summary>
 		/// <remarks>This is necessary when you send a message and want to read or write from/to it afterwards.</remarks>
 		internal void RemoveSendHeader() {
 			ulong div;
-			switch(SendMode) {
+			MessageSendMode sendMode = GetMessageSendMode(SendHeader.header);
+			switch(sendMode) {
 				case MessageSendMode.Notify: div = 1 << NotifyHeaderBits; break;
 				case MessageSendMode.Queued: div = 1 << QueuedHeaderBits; break;
 				case MessageSendMode.Reliable: div = 1 << ReliableHeaderBits; break;
 				case MessageSendMode.Unreliable: div = 1 << UnreliableHeaderBits; break;
-				default: throw new ArgumentOutOfRangeException(nameof(SendMode), SendMode, null);
+				default: throw new ArgumentOutOfRangeException(nameof(sendMode), sendMode, null);
 			}
 			if(SendHeader.id != null) div *= MaxId + 1UL;
 			data.DivReturnMod(div);
@@ -1261,7 +1259,7 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="float"/> was added to.</returns>
-		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible floats are between -0.01 and 0.01.</remarks>
+		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible floats are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
 		public Message AddFloat(float value, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true) {
 			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
@@ -1395,7 +1393,7 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="double"/> was added to.</returns>
-		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible doubles are between -0.01 and 0.01.</remarks>
+		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible doubles are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
 		public Message AddDouble(double value, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true) {
 			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");

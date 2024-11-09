@@ -43,9 +43,6 @@ namespace Riptide.Transports.Tcp
         /// <inheritdoc/>
         protected internal override void Send(byte[] dataBuffer, int amount)
         {
-            if (amount == 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Sending 0 bytes is not allowed!");
-
             try
             {
                 if (socket.Connected)

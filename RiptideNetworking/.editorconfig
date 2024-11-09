@@ -20,3 +20,6 @@ dotnet_diagnostic.IDE0073.severity = none
 
 [WrappingList.cs]
 dotnet_diagnostic.IDE0073.severity = none
+
+[PendingQueuedMessage.cs]
+dotnet_diagnostic.IDE0073.severity = none
