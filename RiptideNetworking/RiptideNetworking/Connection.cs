@@ -218,7 +218,6 @@ namespace Riptide
 		private int SendData(Message message) {
 			int byteAmount = message.BytesInUse;
 			Buffer.BlockCopy(message.Data, 0, Message.ByteBuffer, 0, byteAmount);
-			if(byteAmount >= 1 && Message.ByteBuffer[byteAmount - 1] == 0) throw new Exception("Message data should not be ending with a zero byte!");
 			Send(Message.ByteBuffer, byteAmount);
 			return byteAmount;
 		}

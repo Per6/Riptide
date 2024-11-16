@@ -6,6 +6,7 @@
 using Riptide.Transports;
 using Riptide.Utils;
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -292,6 +293,18 @@ namespace Riptide
 		public Message SetSendHeader(MessageHeader header, byte? id) {
 			SendHeader = (header, id);
 			return this;
+		}
+
+		/// <summary>Gets all the bits of a message.</summary>
+		/// <returns>The bits of the message.</returns>
+		public IEnumerable<bool> GetAllBits() {
+			ulong[] uldata = Data;
+			int length = data.MaxIndex;
+			for(int i = 0; i < length; i++) {
+				ulong ul = uldata[i];
+				for(int j = 0; j < sizeof(ulong) * BitsPerByte; j++)
+					yield return (ul & (1UL << j)) != 0;
+			}
 		}
         #endregion
 
@@ -650,8 +663,8 @@ namespace Riptide
 		/// <summary>Adds an Enum to the message.</summary>
 		/// <param name="value">The enum to add.</param>
 		/// <returns>The message that the <see cref="Enum"/> was added to.</returns>
-		public Message AddEnum(Enum value) {
-			Enum[] possibleValues = (Enum[])Enum.GetValues(value.GetType());
+		public Message AddEnum<T>(T value) where T : Enum {
+			T[] possibleValues = (T[])Enum.GetValues(typeof(T));
 			return AddElement(value, possibleValues);
 		}
 

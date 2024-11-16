@@ -15,6 +15,8 @@ namespace Riptide.Utils
         private int maxIndex = 0;
         private int minIndex = 0;
 
+		internal int MaxIndex => maxIndex;
+
 		internal FastBigInt(int initialCapacity) {
 			data = new ulong[initialCapacity];
 		}
@@ -99,6 +101,7 @@ namespace Riptide.Utils
 		internal int GetBytesInUse() {
 			int bytes = maxIndex * sizeof(ulong);
 			ulong max = data[maxIndex];
+			if(max == 0 && maxIndex > 0) throw new Exception("Invalid data");
 			while(max > 0) {
 				max >>= 8;
 				bytes++;

@@ -3,7 +3,6 @@
 // For additional information please see the included LICENSE.md file or view it on GitHub:
 // https://github.com/RiptideNetworking/Riptide/blob/main/LICENSE.md
 
-using Riptide.Utils;
 using System;
 
 namespace Riptide
@@ -25,7 +24,6 @@ namespace Riptide
 			int byteAmount = message.BytesInUse;
 			data = new byte[byteAmount];
 			Buffer.BlockCopy(message.Data, 0, data, 0, data.Length);
-			if(byteAmount >= 1 && data[byteAmount - 1] == 0) throw new Exception("Message data should not be ending with a zero byte!");
 			this.connection = connection;
 			SequenceId = message.SequenceId;
 		}
