@@ -38,6 +38,14 @@ namespace Riptide
                     connection.TimeoutTime = defaultTimeout;
             }
         }
+		/// <summary>Wether the connection gets disconnected when a reliable message takes too long.</summary>
+		public bool CanQualityDisconnect {
+			set {
+				defaultCanQualityDisconnect = value;
+				foreach (Connection connection in clients.Values)
+					connection.CanQualityDisconnect = defaultCanQualityDisconnect;
+			}
+		}
         /// <summary>The maximum number of concurrent connections.</summary>
         public ushort MaxClientCount { get; private set; }
         /// <summary>The number of currently connected clients.</summary>
@@ -178,7 +186,7 @@ namespace Riptide
         /// <summary>Handles an incoming connection attempt.</summary>
         private void HandleConnectionAttempt(object _, ConnectedEventArgs e)
         {
-            e.Connection.Initialize(this, defaultTimeout);
+            e.Connection.Initialize(this, defaultTimeout, defaultCanQualityDisconnect);
         }
 
         /// <summary>Handles a connect message.</summary>

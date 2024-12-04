@@ -76,6 +76,8 @@ namespace Riptide
         protected bool useMessageHandlers;
         /// <summary>The default time (in milliseconds) after which to disconnect if no heartbeats are received.</summary>
         protected int defaultTimeout = 5000;
+		/// <summary>Wether the connection gets disconnected when a reliable message takes too long.</summary>
+		protected bool defaultCanQualityDisconnect = true;
 
         /// <summary>A stopwatch used to track how much time has passed.</summary>
         private readonly System.Diagnostics.Stopwatch time = new System.Diagnostics.Stopwatch();

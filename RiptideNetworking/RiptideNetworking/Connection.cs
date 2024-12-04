@@ -159,10 +159,12 @@ namespace Riptide
         /// <summary>Initializes connection data.</summary>
         /// <param name="peer">The <see cref="Riptide.Peer"/> which this connection belongs to.</param>
         /// <param name="timeoutTime">The timeout time.</param>
-        internal void Initialize(Peer peer, int timeoutTime)
+		/// <param name="canQualityDisconnect">Whether or not the connection can disconnect due to poor connection quality.</param>
+        internal void Initialize(Peer peer, int timeoutTime, bool canQualityDisconnect)
         {
             Peer = peer;
             TimeoutTime = timeoutTime;
+			CanQualityDisconnect = canQualityDisconnect;
         }
 
         /// <summary>Resets the connection's timeout time.</summary>

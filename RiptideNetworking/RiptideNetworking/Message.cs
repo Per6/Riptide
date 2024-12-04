@@ -708,10 +708,7 @@ namespace Riptide
 		/// <returns>The array that was retrieved.</returns>
 		public T[] GetEnums<T>(int amount) where T : Enum {
 			T[] possibleValues = (T[])Enum.GetValues(typeof(T));
-			T[] array = new T[amount];
-			for(int i = 0; i < amount; i++)
-				array[i] = GetElement(possibleValues);
-			return array;
+			return GetElements(amount, possibleValues);
 		}
 		#endregion
 

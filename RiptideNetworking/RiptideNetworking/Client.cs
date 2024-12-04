@@ -44,6 +44,14 @@ namespace Riptide
                 connection.TimeoutTime = defaultTimeout;
             }
         }
+		/// <summary>Wether the connection gets disconnected when a reliable message takes too long.</summary>
+		public bool CanQualityDisconnect {
+			set {
+				defaultCanQualityDisconnect = value;
+				if(connection is null) return;
+				connection.CanQualityDisconnect = defaultCanQualityDisconnect;
+			}
+		}
 		/// <summary>The time untill the client disconnects.</summary>
 		public long TimeUntilDisconnect => connection is null || !connection.CanTimeout
 			? -1
@@ -124,7 +132,7 @@ namespace Riptide
 
             this.maxConnectionAttempts = maxConnectionAttempts;
             connectionAttempts = 0;
-            connection.Initialize(this, defaultTimeout);
+            connection.Initialize(this, defaultTimeout, defaultCanQualityDisconnect);
             IncreaseActiveCount();
             this.useMessageHandlers = useMessageHandlers;
             if (useMessageHandlers)
