@@ -286,6 +286,45 @@ namespace Riptide
 			return this;
 		}
 
+		/// <summary>Adds messages of the same MessageHeader to the message.</summary>
+		/// <param name="messages">The messages to add</param>
+		/// <returns>This message.</returns>
+		public Message AddMessages(params Message[] messages) {
+			MessageHeader header = SendHeader.header;
+			bool usesId = SendHeader.id != null;
+			if(!writeValue.IsPowerOf2()) throw new ArgumentException("Can not add messages to a message with a write value that is not a power of 2");
+			AddVarULong((ulong)messages.Length);
+			foreach(Message m in messages) {
+				(MessageHeader mheader, ushort? id) = m.SendHeader;
+				if(mheader != header) throw new ArgumentException("All messages must have the same header!", nameof(messages));
+				if((id != null) != usesId) throw new ArgumentException("All messages must have the same id usage!", nameof(messages));
+				AddVarULong((ulong)m.writeValue.Log2Ceil());
+				if(usesId) AddUShort(id.Value);
+				AddMessage(m, false);
+				writeValue.RoundToNextPowerOf2();
+			}
+			return this;
+		}
+
+		/// <summary>Retrieves the messages from the message.</summary>
+		/// <returns>The retrieved messages.</returns>
+		public Message[] GetMessages() {
+			MessageHeader header = SendHeader.header;
+			bool usesId = SendHeader.id != null;
+			int length = (int)GetVarULong();
+			Message[] messages = new Message[length];
+			for(int i = 0; i < length; i++) {
+				if(usesId) messages[i] = Create(header, GetUShort());
+				else messages[i] = Create(header);
+				int bits = (int)GetVarULong();
+				int ulongs = bits / 64;
+				for(int j = 0; j < ulongs; j++) messages[i].AddULong(GetULong());
+				GetBits(out ulong u, bits % 64);
+				messages[i].AddBits(u, bits % 64);
+			}
+			return messages;
+		}
+
 		/// <summary>Sets the send header of the message.</summary>
 		/// <param name="header">The header to set.</param>
 		/// <param name="id">The id to set.</param>
@@ -1269,7 +1308,7 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="float"/> was added to.</returns>
-		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible floats are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
+		/// <remarks>This is not very compact when min to max goes through 0 since about 50% of possible floats are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
 		public Message AddFloat(float value, float min = float.MinValue, float max = float.MaxValue, int mantissaBits = 23, bool acceptInfAndNaN = true) {
 			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");
@@ -1403,7 +1442,7 @@ namespace Riptide
 		/// <param name="mantissaBits">The amount of mantissa bits. This always rounds towards 0.</param>
 		/// <param name="acceptInfAndNaN">Whether to accept numbers like inf or nan.</param>
 		/// <returns>The message that the <see cref="double"/> was added to.</returns>
-		/// <remarks>This is not very compact when min to max goes through 0 since more than 50% of possible doubles are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
+		/// <remarks>This is not very compact when min to max goes through 0 since about 50% of possible doubles are between -0.01 and 0.01. Consider using AddFixedPoint() instead.</remarks>
 		public Message AddDouble(double value, double min = double.MinValue, double max = double.MaxValue, int mantissaBits = 52, bool acceptInfAndNaN = true) {
 			if(!value.IsRealNumber() && !acceptInfAndNaN) throw new ArgumentOutOfRangeException(nameof(value), $"Value must be a valid number instead of {value}");
 			if(!min.IsRealNumber() || !max.IsRealNumber()) throw new ArgumentOutOfRangeException(nameof(min), "min and max must be valid numbers");

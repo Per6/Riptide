@@ -371,5 +371,23 @@ namespace Riptide.Utils
 			val |= carry << invShift;
 			return value << invShift;
 		}
+
+		internal void RoundToNextPowerOf2() {
+			for(int i = minIndex; i < maxIndex; i++) data[i] = 0;
+			bool roundUp = minIndex != maxIndex;
+			ulong d = data[maxIndex];
+			if(roundUp && d.IsPowerOf2()) data[maxIndex] = d << 1;
+			else data[maxIndex] = d.NextPowerOf2();
+			if(data[maxIndex] == 0) {
+				maxIndex++;
+				EnsureCapacity();
+				data[maxIndex] = 1;
+			}
+		}
+
+		internal int Log2Ceil() {
+			if(minIndex == maxIndex) return data[minIndex].Log2Ceil() + maxIndex * 64;
+			return (data[maxIndex] + 1).Log2Ceil() + maxIndex * 64;
+		}
 	}
 }

@@ -27,6 +27,12 @@ namespace Riptide.Utils
 			return (byte)bits;
 		}
 
+		internal static byte Log2Ceil(this ulong value) {
+			byte bits = Log2(value);
+			if(value > GetMask(bits)) bits++;
+			return bits;
+		}
+
 		internal static bool IsPowerOf2(this ulong value) {
 			if(value == 0) return false;
 			return (value & (value - 1)) == 0;
@@ -73,7 +79,7 @@ namespace Riptide.Utils
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static unsafe double ToDouble(this ulong value) => *(double*)&value;
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static unsafe ulong ToULong(this bool value) => *(byte*)&value;
+		internal static ulong ToULong(this bool value) => value ? 1ul : 0ul;
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static byte Conv(this sbyte value) => (byte)(value + (1 << 7));
@@ -91,5 +97,16 @@ namespace Riptide.Utils
 		internal static ulong Conv(this long value) => (ulong)(value + (1L << 63));
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static long Conv(this ulong value) => (long)value - (1L << 63);
+
+		internal static ulong NextPowerOf2(this ulong value) {
+			value--;
+			value |= value >> 1;
+			value |= value >> 2;
+			value |= value >> 4;
+			value |= value >> 8;
+			value |= value >> 16;
+			value |= value >> 32;
+			return value + 1;
+		}
 	}
 }
