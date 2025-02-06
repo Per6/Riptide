@@ -161,7 +161,6 @@ namespace Riptide.Utils
 			AdjustMinAndMax();
 		}
 
-		/// <remarks>This does not support div > (ulong.MaxValue >> 1)</remarks>
 		internal ulong DivReturnMod(ulong div) {
 			if(div == 0) throw new DivideByZeroException("Divisor cannot be zero.");
 
@@ -337,14 +336,12 @@ namespace Riptide.Utils
 			return (value, carry);
 		}
 
-		/// <remarks>This does not support div > (ulong.MaxValue >> 1)</remarks>
 		private static (ulong value, ulong rem) DivideUlong(ulong val, ulong carry, ulong div) {
 			if(carry == 0) return (val / div, val % div);
 			ulong extra = IntermediateDivide(ref val, carry, div);
 			return (val / div + extra, val % div);
 		}
 
-		/// <remarks>This does not support div > (ulong.MaxValue >> 1)</remarks>
 		private static ulong IntermediateDivide(ref ulong val, ulong carry, ulong div) {
 			if(div <= uint.MaxValue) {
 				ulong intermediate = val >> 32 | carry << 32;
@@ -352,6 +349,15 @@ namespace Riptide.Utils
 				(ulong interDiv, ulong interMod) = (intermediate / div, intermediate % div);
 				val |= interMod << 32;
 				return interDiv << 32;
+			}
+			if(div > (ulong.MaxValue >> 1)) {
+				BigInteger valAndCarry = new BigInteger(carry);
+				valAndCarry <<= 64;
+				valAndCarry += val;
+				valAndCarry /= div;
+				ulong res = (ulong)valAndCarry;
+				val -= res * div;
+				return res;
 			}
 
 			ulong value = 0;

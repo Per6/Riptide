@@ -4,10 +4,10 @@
 // https://github.com/RiptideNetworking/Riptide/blob/main/LICENSE.md
 
 using Riptide.Transports;
+using Riptide.Transports.Tcp;
 using Riptide.Utils;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Riptide
 {
@@ -35,7 +35,9 @@ namespace Riptide
 		private ushort recievedNextQueuedSequenceId = 0;
 		/// <summary>The maximum number of Queued messages, sent simultaneously.</summary>
 		/// <remarks><b>This absolutely needs to be equal on all devices, including server</b>
-		/// <para>it has a minimum of 1 and max of 16383 but 1024 is the recommended max</para></remarks>
+		/// <para>It has a minimum of 1 and max of 16383 but 1024 is the recommended max and 10 is recommended.</para>
+		/// <para>It has a base value of 1, increasing this allows <see cref="Message"/>s to be recieved in the same update tick
+		/// and increasing it too much reduces congestion control.</para></remarks>
 		public static ushort MaxSynchronousQueuedMessages {
 			private get => maxSynchronousQueuedMessages;
 			set => maxSynchronousQueuedMessages = value.Clamp(1, ushort.MaxValue / 4);
@@ -180,6 +182,7 @@ namespace Riptide
         {
 			MessageSendMode sendMode = message.SetSendHeader();
 			if(message.BytesInUse >= Message.MaxSize) throw new Exception($"Message is too large to send {message.BytesInUse} with max of {Message.MaxSize}. Consider splitting it up or increasing Message.MaxPayloadSize at the cost of either reliability or resend attempts.");
+			if(sendMode != MessageSendMode.Unreliable && this is TcpConnection) throw new Exception("Queued, Notify and Reliable messages are not supported on TCP connections as all TCP messages are naturally queued and using anything other than unreliable would be redundand.");
             ushort sequenceId = 0;
 
             if (sendMode == MessageSendMode.Notify)

@@ -23,7 +23,7 @@ namespace Riptide
         Unreliable = MessageHeader.Unreliable,
         /// <summary>Guarantees delivery but not order.</summary>
         Reliable = MessageHeader.Reliable,
-		/// <summary>Guarantees both delivery and order and doesn't give up until the connection gives up.</summary>
+		/// <summary>Guarantees both delivery and order. <para>If the queued Messages are backing up, increase <see cref="Connection.MaxSynchronousQueuedMessages"/>.</para></summary>
 		Queued = MessageHeader.Queued
     }
 
@@ -89,7 +89,7 @@ namespace Riptide
 
 		/// <summary>The maximum value of Id.</summary>
 		public static ushort MaxId { private get; set; } = ushort.MaxValue;
-		/// <summary>The sequence Id of the message. Only Queued and reliable have one.</summary>
+		/// <summary>The sequence Id of the message. <para>Only Queued and reliable have one.</para></summary>
 		internal ushort SequenceId {
 			get => (ushort)(Data[0] >> HeaderBits);
 			set {
@@ -97,7 +97,7 @@ namespace Riptide
 				Data[0] |= ((ulong)value) << HeaderBits;
 			}
 		}
-		/// <summary>The Id of a message.</summary>
+		/// <summary>The Id of a message. <para>Notify doesn't have one.</para></summary>
 		public ushort? Id => SendHeader.id;
 		/// <summary>The Header of the message.</summary>
 		public MessageHeader Header => SendHeader.header;
@@ -124,6 +124,11 @@ namespace Riptide
 			if(InitialMessageSize < sizeof(ulong)) throw new InvalidOperationException($"'{nameof(InitialMessageSize)}' must be at least {sizeof(ulong)}!");
 			data = new FastBigInt(InitialMessageSize / sizeof(ulong));
 			writeValue = new FastBigInt(InitialMessageSize / sizeof(ulong), 1);
+			if(id.HasValue) {
+				if(id.Value > MaxId) throw new ArgumentOutOfRangeException(nameof(id), $"'{nameof(id)}' cannot be greater than {MaxId}!");
+				if(header == MessageHeader.Notify) throw new ArgumentException($"'{nameof(id)}' should not be set for notify messages!", nameof(id));
+			} else if(header == MessageHeader.Unreliable
+				|| header == MessageHeader.Reliable || header == MessageHeader.Queued) throw new ArgumentException($"'{nameof(id)}' must be set for unreliable, reliable and queued messages!", nameof(id));
 			SendHeader = (header, id);
 		}
 
@@ -1132,8 +1137,7 @@ namespace Riptide
 			if(min > max) throw new ArgumentOutOfRangeException(nameof(min), "min must be <= max");
 			ulong value;
 			ulong dif = max - min;
-			// FastBigInt doesn't support that division or max - min + 1 overflow
-			if(dif++ >= (ulong.MaxValue >> 1)) TakeBits(64);
+			if(dif++ == ulong.MaxValue) TakeBits(64);
 			else if(dif.IsPowerOf2()) TakeBits(dif.Log2());
 			else {
 				ResetReadBit();

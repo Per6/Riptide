@@ -28,7 +28,7 @@ namespace Riptide.Transports
         /// <summary>A notify message.</summary>
         Notify,
 
-		/// <summary>An overly reliable user message, guaranteeing order.</summary>
+		/// <summary>A reliable user message, guaranteeing order. <para>If the queued Messages are backing up, increase <see cref="Connection.MaxSynchronousQueuedMessages"/>.</para></summary>
 		Queued,
 
         /// <summary>A reliable user message.</summary>
