@@ -222,8 +222,8 @@ namespace Riptide
 		/// <returns>The amount of bytes sent</returns>
 		private int SendData(Message message) {
 			int byteAmount = message.BytesInUse;
-			Buffer.BlockCopy(message.Data, 0, Message.SendBuffer, 0, byteAmount);
-			Send(Message.SendBuffer, byteAmount);
+			Buffer.BlockCopy(message.Data, 0, Peer.ByteBuffer, 0, byteAmount);
+			Send(Peer.ByteBuffer, byteAmount);
 			return byteAmount;
 		}
 

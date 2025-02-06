@@ -81,7 +81,7 @@ namespace Riptide.Transports.Tcp
 					if(nextMessageSize == 0) return true;
 				}
 				if(nextMessageSize == 0 || socket.Available < nextMessageSize) return false;
-				socket.Receive(Peer.ReceiveBuffer, nextMessageSize, SocketFlags.None);
+				socket.Receive(Peer.ByteBuffer, nextMessageSize, SocketFlags.None);
 				return true;
 			}
 			catch (SocketException ex)

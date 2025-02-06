@@ -110,8 +110,8 @@ namespace Riptide.Transports.Udp
 			{
 				if (socket.Available <= 0 || !socket.Poll(ReceivePollingTime, SelectMode.SelectRead))
 					return false;
-				int byteCount = socket.ReceiveFrom(Peer.ReceiveBuffer, SocketFlags.None, ref remoteEndPoint);
-				OnDataReceived(Peer.ReceiveBuffer, byteCount, (IPEndPoint)remoteEndPoint);
+				int byteCount = socket.ReceiveFrom(Peer.ByteBuffer, SocketFlags.None, ref remoteEndPoint);
+				OnDataReceived(Peer.ByteBuffer, byteCount, (IPEndPoint)remoteEndPoint);
 				return true;
 			}
 			catch (SocketException ex)

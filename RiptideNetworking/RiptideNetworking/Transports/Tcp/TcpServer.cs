@@ -143,7 +143,7 @@ namespace Riptide.Transports.Tcp
         /// <inheritdoc/>
         protected internal override void OnDataReceived(int amount, TcpConnection fromConnection)
         {
-            if ((MessageHeader)(Peer.ReceiveBuffer[0] & Message.HeaderBitmask) == MessageHeader.Connect)
+            if ((MessageHeader)(Peer.ByteBuffer[0] & Message.HeaderBitmask) == MessageHeader.Connect)
             {
                 if (fromConnection.DidReceiveConnect)
                     return;
@@ -151,7 +151,7 @@ namespace Riptide.Transports.Tcp
                 fromConnection.DidReceiveConnect = true;
             }
 
-            DataReceived?.Invoke(this, new DataReceivedEventArgs(Peer.ReceiveBuffer, amount, fromConnection));
+            DataReceived?.Invoke(this, new DataReceivedEventArgs(Peer.ByteBuffer, amount, fromConnection));
         }
     }
 }
