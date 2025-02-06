@@ -74,17 +74,25 @@ namespace Riptide
                     throw new ArgumentOutOfRangeException(nameof(value), $"'{nameof(MaxPayloadSize)}' cannot be negative!");
 
                 MaxSize = MaxHeaderSize / BitsPerByte + (MaxHeaderSize % BitsPerByte == 0 ? 0 : 1) + value;
-                ByteBuffer = new byte[MaxSize];
+                SendAndRecieveBufferSize = MaxSize;
                 PendingMessage.ClearPool();
             }
         }
         /// <summary>An intermediary buffer to help convert <see cref="data"/> to a byte array when sending.</summary>
-        internal static byte[] ByteBuffer;
+        internal static byte[] SendBuffer;
+
+		internal static int SendAndRecieveBufferSize {
+			get => Peer.ReceiveBuffer.Length;
+			set {
+				Peer.ReceiveBuffer = new byte[value];
+				SendBuffer = new byte[value];
+			}
+		}
 
         static Message()
         {
             MaxSize = MaxHeaderSize / BitsPerByte + (MaxHeaderSize % BitsPerByte == 0 ? 0 : 1) + 1225;
-            ByteBuffer = new byte[MaxSize];
+            SendAndRecieveBufferSize = MaxSize;
         }
 
 		/// <summary>The maximum value of Id.</summary>

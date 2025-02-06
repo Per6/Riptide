@@ -47,9 +47,9 @@ namespace Riptide.Transports.Tcp
             {
                 if (socket.Connected)
                 {
-                    Converter.FromInt(amount, peer.SendBuffer, 0);
-                    Array.Copy(dataBuffer, 0, peer.SendBuffer, sizeof(int), amount); // TODO: consider sending length separately with an extra socket.Send call instead of copying the data an extra time
-                    socket.Send(peer.SendBuffer, amount + sizeof(int), SocketFlags.None);
+					byte[] amountBytes = BitConverter.GetBytes(amount);
+					socket.Send(amountBytes, sizeof(int), SocketFlags.None);
+                    socket.Send(dataBuffer, amount, SocketFlags.None);
                 }
             }
             catch (SocketException)
@@ -63,82 +63,59 @@ namespace Riptide.Transports.Tcp
         /// <summary>Polls the socket and checks if any data was received.</summary>
         internal void Receive()
         {
-            bool tryReceiveMore = true;
-            while (tryReceiveMore)
-            {
-                int byteCount = 0;
-                try
-                {
-                    if (nextMessageSize > 0)
-                    {
-                        // We already have a size value
-                        tryReceiveMore = TryReceiveMessage(out byteCount);
-                    }
-                    else if (socket.Available >= sizeof(int))
-                    {
-                        // We have enough bytes for a complete size value
-                        socket.Receive(sizeBytes, sizeof(int), SocketFlags.None);
-                        nextMessageSize = Converter.ToInt(sizeBytes, 0);
-                        
-                        if (nextMessageSize > 0)
-                            tryReceiveMore = TryReceiveMessage(out byteCount);
-                    }
-                    else
-                        tryReceiveMore = false;
-                }
-                catch (SocketException ex)
-                {
-                    tryReceiveMore = false;
-                    switch (ex.SocketErrorCode)
-                    {
-                        case SocketError.Interrupted:
-                        case SocketError.NotSocket:
-                            peer.OnDisconnected(this, DisconnectReason.TransportError);
-                            break;
-                        case SocketError.ConnectionReset:
-                            peer.OnDisconnected(this, DisconnectReason.Disconnected);
-                            break;
-                        case SocketError.TimedOut:
-                            peer.OnDisconnected(this, DisconnectReason.TimedOut);
-                            break;
-                        case SocketError.MessageSize:
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                catch (ObjectDisposedException)
-                {
-                    tryReceiveMore = false;
-                    peer.OnDisconnected(this, DisconnectReason.TransportError);
-                }
-                catch (NullReferenceException)
-                {
-                    tryReceiveMore = false;
-                    peer.OnDisconnected(this, DisconnectReason.TransportError);
-                }
-
-                if (byteCount > 0)
-                    peer.OnDataReceived(byteCount, this);
+            while (TryRecieve(ref nextMessageSize))
+			{
+				peer.OnDataReceived(nextMessageSize, this);
+				nextMessageSize = 0;
             }
         }
 
-        /// <summary>Receives a message, if all of its data is ready to be received.</summary>
-        /// <param name="receivedByteCount">How many bytes were received.</param>
-        /// <returns>Whether or not all of the message's data was ready to be received.</returns>
-        private bool TryReceiveMessage(out int receivedByteCount)
-        {
-            if (socket.Available >= nextMessageSize)
-            {
-                // We have enough bytes to read the complete message
-                receivedByteCount = socket.Receive(peer.ReceiveBuffer, nextMessageSize, SocketFlags.None);
-                nextMessageSize = 0;
-                return true;
-            }
-
-            receivedByteCount = 0;
-            return false;
-        }
+        private bool TryRecieve(ref int nextMessageSize) {
+			try
+			{
+				if (nextMessageSize == 0 && socket.Available >= sizeof(int))
+				{
+					// We have enough bytes for a complete size value
+					socket.Receive(sizeBytes, sizeof(int), SocketFlags.None);
+					nextMessageSize = Converter.ToInt(sizeBytes, 0);
+					if(nextMessageSize == 0) return true;
+				}
+				if(nextMessageSize == 0 || socket.Available < nextMessageSize) return false;
+				socket.Receive(Peer.ReceiveBuffer, nextMessageSize, SocketFlags.None);
+				return true;
+			}
+			catch (SocketException ex)
+			{
+				switch (ex.SocketErrorCode)
+				{
+					case SocketError.Interrupted:
+					case SocketError.NotSocket:
+						peer.OnDisconnected(this, DisconnectReason.TransportError);
+						break;
+					case SocketError.ConnectionReset:
+						peer.OnDisconnected(this, DisconnectReason.Disconnected);
+						break;
+					case SocketError.TimedOut:
+						peer.OnDisconnected(this, DisconnectReason.TimedOut);
+						break;
+					case SocketError.MessageSize:
+						break;
+					default:
+						break;
+				}
+				return false;
+			}
+			catch (ObjectDisposedException)
+			{
+				peer.OnDisconnected(this, DisconnectReason.TransportError);
+				return false;
+			}
+			catch (NullReferenceException)
+			{
+				peer.OnDisconnected(this, DisconnectReason.TransportError);
+				return false;
+			}
+		}
 
         /// <summary>Closes the connection.</summary>
         internal void Close()

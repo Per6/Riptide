@@ -540,8 +540,12 @@ namespace Riptide
         /// <param name="connection">The connection that failed to be fully established.</param>
         protected virtual void OnConnectionFailed(Connection connection)
         {
-            RiptideLogger.Log(LogType.Info, LogName, $"Client {connection} stopped responding before the connection was fully established!");
-            ConnectionFailed?.Invoke(this, new ServerConnectionFailedEventArgs(connection));
+			try {
+            	ConnectionFailed?.Invoke(this, new ServerConnectionFailedEventArgs(connection));
+            	RiptideLogger.Log(LogType.Info, LogName, $"Client {connection} stopped responding before the connection was fully established!");
+			} catch (Exception e) {
+				RiptideLogger.Log(LogType.Error, LogName, e.Message);
+			}
         }
 
         /// <summary>Invokes the <see cref="MessageReceived"/> event and initiates handling of the received message.</summary>
@@ -573,9 +577,13 @@ namespace Riptide
         /// <param name="reason">The reason for the disconnection.</param>
         protected virtual void OnClientDisconnected(Connection connection, DisconnectReason reason)
         {
-            RiptideLogger.Log(LogType.Info, LogName, $"Client {connection.Id} ({connection}) disconnected: {Helper.GetReasonString(reason)}.");
             SendClientDisconnected(connection.Id);
-            ClientDisconnected?.Invoke(this, new ServerDisconnectedEventArgs(connection, reason));
+			try {
+            	ClientDisconnected?.Invoke(this, new ServerDisconnectedEventArgs(connection, reason));
+        		RiptideLogger.Log(LogType.Info, LogName, $"Client {connection.Id} ({connection}) disconnected: {Helper.GetReasonString(reason)}.");
+			} catch (Exception e) {
+				RiptideLogger.Log(LogType.Error, LogName, e.Message);
+			}
         }
         #endregion
     }

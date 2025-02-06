@@ -14,11 +14,6 @@ namespace Riptide.Transports.Tcp
         /// <inheritdoc cref="IPeer.Disconnected"/>
         public event EventHandler<DisconnectedEventArgs> Disconnected;
 
-        /// <summary>An array that incoming data is received into.</summary>
-        internal readonly byte[] ReceiveBuffer;
-        /// <summary>An array that outgoing data is sent out of.</summary>
-        internal readonly byte[] SendBuffer;
-
         /// <summary>The default size used for the socket's send and receive buffers.</summary>
         protected const int DefaultSocketBufferSize = 1024 * 1024; // 1MB
         /// <summary>The size to use for the socket's send and receive buffers.</summary>
@@ -36,8 +31,6 @@ namespace Riptide.Transports.Tcp
                 throw new ArgumentOutOfRangeException(nameof(socketBufferSize), $"The minimum socket buffer size is {MinSocketBufferSize}!");
 
             this.socketBufferSize = socketBufferSize;
-            ReceiveBuffer = new byte[Message.MaxSize];
-            SendBuffer = new byte[Message.MaxSize + sizeof(int)]; // Need room for the entire message plus the message length (since this is TCP)
         }
 
         /// <summary>Handles received data.</summary>

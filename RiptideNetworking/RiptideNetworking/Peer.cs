@@ -56,6 +56,8 @@ namespace Riptide
     /// <summary>Provides base functionality for <see cref="Server"/> and <see cref="Client"/>.</summary>
     public abstract class Peer
     {
+		/// <summary>An array that incoming data is received into.</summary>
+		internal static byte[] ReceiveBuffer; // TODO test
         /// <summary>The name to use when logging messages via <see cref="RiptideLogger"/>.</summary>
         public readonly string LogName;
         /// <summary>Sets the relevant connections' <see cref="Connection.TimeoutTime"/>s.</summary>

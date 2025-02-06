@@ -37,8 +37,6 @@ namespace Riptide.Transports.Udp
         protected readonly SocketMode mode;
         /// <summary>The size to use for the socket's send and receive buffers.</summary>
         private readonly int socketBufferSize;
-        /// <summary>The array that incoming data is received into.</summary>
-        private readonly byte[] receivedData;
         /// <summary>The socket to use for sending and receiving.</summary>
         private Socket socket;
         /// <summary>Whether or not the transport is running.</summary>
@@ -56,7 +54,6 @@ namespace Riptide.Transports.Udp
 
             this.mode = mode;
             this.socketBufferSize = socketBufferSize;
-            receivedData = new byte[Message.MaxSize];
         }
 
         /// <inheritdoc cref="IPeer.Poll"/>
@@ -105,51 +102,47 @@ namespace Riptide.Transports.Udp
             if (!isRunning)
                 return;
 
-            bool tryReceiveMore = true;
-            while (tryReceiveMore)
-            {
-                int byteCount = 0;
-                try
-                {
-                    if (socket.Available > 0 && socket.Poll(ReceivePollingTime, SelectMode.SelectRead))
-                        byteCount = socket.ReceiveFrom(receivedData, SocketFlags.None, ref remoteEndPoint);
-                    else
-                        tryReceiveMore = false;
-                }
-                catch (SocketException ex)
-                {
-                    tryReceiveMore = false;
-                    switch (ex.SocketErrorCode)
-                    {
-                        case SocketError.Interrupted:
-                        case SocketError.NotSocket:
-                            isRunning = false;
-                            break;
-                        case SocketError.ConnectionReset:
-                            tryReceiveMore = true;
-                            break;
-                        case SocketError.MessageSize:
-                        case SocketError.TimedOut:
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                catch (ObjectDisposedException)
-                {
-                    tryReceiveMore = false;
-                    isRunning = false;
-                }
-                catch (NullReferenceException)
-                {
-                    tryReceiveMore = false;
-                    isRunning = false;
-                }
-
-                if (byteCount > 0)
-                    OnDataReceived(receivedData, byteCount, (IPEndPoint)remoteEndPoint);
-            }
+            while (TryRecieve()) {}
         }
+
+        private bool TryRecieve() {
+			try
+			{
+				if (socket.Available <= 0 || !socket.Poll(ReceivePollingTime, SelectMode.SelectRead))
+					return false;
+				int byteCount = socket.ReceiveFrom(Peer.ReceiveBuffer, SocketFlags.None, ref remoteEndPoint);
+				OnDataReceived(Peer.ReceiveBuffer, byteCount, (IPEndPoint)remoteEndPoint);
+				return true;
+			}
+			catch (SocketException ex)
+			{
+				switch (ex.SocketErrorCode)
+				{
+					case SocketError.Interrupted:
+					case SocketError.NotSocket:
+						isRunning = false;
+						break;
+					case SocketError.ConnectionReset:
+						return true;
+					case SocketError.MessageSize:
+					case SocketError.TimedOut:
+						break;
+					default:
+						break;
+				}
+				return false;
+			}
+			catch (ObjectDisposedException)
+			{
+				isRunning = false;
+				return false;
+			}
+			catch (NullReferenceException)
+			{
+				isRunning = false;
+				return false;
+			}
+		}
 
         /// <summary>Sends data to a given endpoint.</summary>
         /// <param name="dataBuffer">The array containing the data.</param>
