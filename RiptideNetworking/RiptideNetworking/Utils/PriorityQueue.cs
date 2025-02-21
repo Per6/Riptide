@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Riptide.Utils
 {
@@ -20,6 +21,9 @@ namespace Riptide.Utils
         private const int DefaultCapacity = 8;
         private Entry<TElement, TPriority>[] heap;
         private readonly IComparer<TPriority> comparer;
+
+		/// <summary>The elements in the PriorityQueue in unordered order.</summary>
+		public IEnumerable<TElement> UnorderedElements => heap.Take(Count).Select(e => e.Element);
 
         /// <summary>Initializes a new instance of the <see cref="PriorityQueue{TElement, TPriority}"/> class.</summary>
         /// <param name="capacity">Initial capacity to allocate for the underlying heap array.</param>

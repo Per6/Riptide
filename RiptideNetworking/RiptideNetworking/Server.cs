@@ -561,13 +561,21 @@ namespace Riptide
                 return;
             }
 
-            MessageReceived?.Invoke(this, new MessageReceivedEventArgs(fromConnection, messageId, message));
+			try {
+            	MessageReceived?.Invoke(this, new MessageReceivedEventArgs(fromConnection, messageId, message));
+			} catch (Exception e) {
+				RiptideLogger.Log(LogType.Error, LogName, $"Message Received: {e}");
+			}
 
             if (useMessageHandlers)
             {
-                if (messageHandlers.TryGetValue(messageId, out MessageHandler messageHandler))
-                    messageHandler(fromConnection.Id, message);
-                else
+                if (messageHandlers.TryGetValue(messageId, out MessageHandler messageHandler)) {
+					try {
+						messageHandler(fromConnection.Id, message);
+					} catch (Exception e) {
+						RiptideLogger.Log(LogType.Error, LogName, $"Message Handler: {e.ToString()}");
+					}
+				} else
                     RiptideLogger.Log(LogType.Warning, LogName, $"No message handler method found for message ID {messageId}!");
             }
         }
